@@ -2,20 +2,15 @@ import AppKit
 import GhosttyKit
 import QuartzCore
 
-/// NSView that hosts a single ghostty terminal surface with Metal rendering.
-/// Handles keyboard, mouse, resize, and focus — the same pattern as Ghostty's own macOS app.
 final class GhosttyTerminalNSView: NSView {
     private(set) var surface: ghostty_surface_t?
     private let workingDirectory: String
     var onTitleChange: ((String) -> Void)?
     var onFocus: (() -> Void)?
 
-    // Text input state for IME
     private var _markedRange: NSRange = .init(location: NSNotFound, length: 0)
     private var _selectedRange: NSRange = .init(location: NSNotFound, length: 0)
 
-    // Key event accumulator: interpretKeyEvents calls insertText/doCommandBySelector,
-    // then we send the ghostty key event with collected text afterward
     private var keyTextAccumulator: [String] = []
     private var currentKeyEvent: NSEvent?
 
@@ -38,8 +33,6 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     override var wantsUpdateLayer: Bool { true }
-
-    // MARK: - Surface lifecycle
 
     func createSurface() {
         guard surface == nil, let app = GhosttyService.shared.app else { return }
@@ -88,8 +81,6 @@ final class GhosttyTerminalNSView: NSView {
         destroySurface()
     }
 
-    // MARK: - View lifecycle
-
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window != nil && surface == nil {
@@ -131,8 +122,6 @@ final class GhosttyTerminalNSView: NSView {
         ghostty_surface_set_size(surface, w, h)
     }
 
-    // MARK: - First responder
-
     override var acceptsFirstResponder: Bool { true }
 
     override func becomeFirstResponder() -> Bool {
@@ -152,8 +141,6 @@ final class GhosttyTerminalNSView: NSView {
         return result
     }
 
-    // MARK: - Tracking area
-
     private var currentTrackingArea: NSTrackingArea?
 
     private func setupTrackingArea() {
@@ -172,15 +159,12 @@ final class GhosttyTerminalNSView: NSView {
         setupTrackingArea()
     }
 
-    // MARK: - Keyboard input
-
     override func keyDown(with event: NSEvent) {
         guard let surface else { super.keyDown(with: event); return }
 
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
-        // Ctrl+key fast path (Ctrl+C, Ctrl+D, etc.)
         if flags.contains(.control) && !flags.contains(.command) && !flags.contains(.option) && !hasMarkedText() {
             var keyEvent = buildKeyEvent(from: event, action: action)
             let text = event.charactersIgnoringModifiers ?? event.characters ?? ""
@@ -196,7 +180,6 @@ final class GhosttyTerminalNSView: NSView {
             return
         }
 
-        // Command+key: send without text (menu shortcuts)
         if flags.contains(.command) {
             var keyEvent = buildKeyEvent(from: event, action: action)
             keyEvent.text = nil
@@ -204,20 +187,16 @@ final class GhosttyTerminalNSView: NSView {
             return
         }
 
-        // Normal key: run through interpretKeyEvents to collect text from IME,
-        // then always send the key event to ghostty with the real keyCode.
         let hadMarkedText = hasMarkedText()
         currentKeyEvent = event
         keyTextAccumulator = []
         interpretKeyEvents([event])
         currentKeyEvent = nil
 
-        // Build the ghostty key event with the real keyCode
         var keyEvent = buildKeyEvent(from: event, action: action)
         keyEvent.composing = hasMarkedText() || hadMarkedText
 
         if !keyTextAccumulator.isEmpty && !keyEvent.composing {
-            // insertText was called — send each accumulated text
             for text in keyTextAccumulator {
                 text.withCString { ptr in
                     keyEvent.text = ptr
@@ -225,8 +204,6 @@ final class GhosttyTerminalNSView: NSView {
                 }
             }
         } else if !hasMarkedText() {
-            // No text accumulated (non-printable key like backspace, enter, arrows)
-            // or composing ended — send key without text, ghostty handles it by keycode
             let text = event.characters ?? ""
             if !text.isEmpty && !keyEvent.composing {
                 text.withCString { ptr in
@@ -238,12 +215,9 @@ final class GhosttyTerminalNSView: NSView {
                 _ = ghostty_surface_key(surface, keyEvent)
             }
         }
-        // If still composing (hasMarkedText), don't send — preedit is handled in setMarkedText
     }
 
     override func doCommand(by selector: Selector) {
-        // Intentionally empty — prevents system beep on unhandled key commands.
-        // The key will be sent to ghostty in the keyDown flow after interpretKeyEvents returns.
     }
 
     override func insertText(_ insertString: Any) {
@@ -274,8 +248,6 @@ final class GhosttyTerminalNSView: NSView {
         }
         return false
     }
-
-    // MARK: - Mouse input
 
     private func mousePoint(from event: NSEvent) -> NSPoint {
         let local = convert(event.locationInWindow, from: nil)
@@ -324,8 +296,6 @@ final class GhosttyTerminalNSView: NSView {
         ghostty_surface_mouse_scroll(surface, event.scrollingDeltaX, event.scrollingDeltaY, mods)
     }
 
-    // MARK: - Helpers
-
     private func buildKeyEvent(from event: NSEvent, action: ghostty_input_action_e) -> ghostty_input_key_s {
         var keyEvent = ghostty_input_key_s()
         keyEvent.action = action
@@ -368,22 +338,16 @@ final class GhosttyTerminalNSView: NSView {
     }
 }
 
-// MARK: - NSTextInputClient (nonisolated to satisfy protocol)
-
 extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
     func insertText(_ string: Any, replacementRange: NSRange) {
         let text = (string as? String) ?? (string as? NSAttributedString)?.string ?? ""
         guard !text.isEmpty else { return }
 
-        // Clear marked text
         _markedRange = NSRange(location: NSNotFound, length: 0)
         if let surface {
             ghostty_surface_preedit(surface, nil, 0)
         }
 
-        // If called from within interpretKeyEvents (keyDown flow), accumulate
-        // the text — it will be sent with the real keyCode afterward.
-        // If called externally (e.g. voice dictation), send directly.
         if currentKeyEvent != nil {
             keyTextAccumulator.append(text)
         } else if let surface {

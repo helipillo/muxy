@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Run
 
 ```bash
+scripts/setup.sh         # First-time setup (downloads GhosttyKit.xcframework)
 swift build              # Debug build
 swift build -c release   # Release build
 swift run Muxy            # Run the app
@@ -28,22 +29,11 @@ Muxy is a macOS terminal multiplexer built with SwiftUI that uses [libghostty](h
 
 ## GhosttyKit Integration
 
-`GhosttyKit/` is a C module wrapping `ghostty.h` — the libghostty API. The precompiled static library lives in `GhosttyKit.xcframework/`. The `ghostty/` submodule contains the full Ghostty source for reference but is not compiled directly.
+`GhosttyKit/` is a C module wrapping `ghostty.h` — the libghostty API. The precompiled static library lives in `GhosttyKit.xcframework/` (gitignored, downloaded via `scripts/setup.sh`).
 
 Key libghostty types: `ghostty_app_t` (app), `ghostty_surface_t` (terminal surface), `ghostty_config_t` (configuration). Surfaces are created when terminal views move to a window and destroyed on removal.
 
-### Building libghostty
-
-To rebuild the xcframework from the ghostty submodule (requires Zig):
-
-```bash
-cd ghostty
-zig build -Demit-xcframework=true -Dxcframework-target=native   # fast, host arch only
-zig build -Demit-xcframework=true -Dxcframework-target=universal # full universal build
-cp -R macos/GhosttyKit.xcframework ../GhosttyKit.xcframework
-```
-
-See [docs/building-ghostty.md](docs/building-ghostty.md) for full details.
+The xcframework is built via GitHub Actions on the [muxy-app/ghostty](https://github.com/muxy-app/ghostty) fork. See [docs/building-ghostty.md](docs/building-ghostty.md) for details.
 
 ## Data Persistence
 

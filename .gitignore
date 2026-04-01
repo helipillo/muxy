@@ -7,4 +7,6 @@ DerivedData/
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
 GhosttyKit.xcframework
+GhosttyKit/ghostty.h
+/ghostty
 /build

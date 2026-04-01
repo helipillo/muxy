@@ -20,6 +20,7 @@ struct PaneTabStrip: View {
             }
 
             Spacer(minLength: 0)
+                .background(WindowDragRepresentable())
 
             HStack(spacing: 0) {
                 IconButton(symbol: "square.split.2x1") { onSplit(.horizontal) }
@@ -29,7 +30,6 @@ struct PaneTabStrip: View {
             .padding(.trailing, 4)
         }
         .frame(height: 32)
-        .background(WindowDragRepresentable())
     }
 }
 
@@ -130,6 +130,14 @@ private struct MiddleClickView: NSViewRepresentable {
 
 private final class MiddleClickNSView: NSView {
     var action: (() -> Void)?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let currentEvent = NSApp.currentEvent,
+              currentEvent.type == .otherMouseDown,
+              currentEvent.buttonNumber == 2
+        else { return nil }
+        return super.hitTest(point)
+    }
 
     override func otherMouseDown(with event: NSEvent) {
         guard event.buttonNumber == 2 else {

@@ -8,7 +8,7 @@ struct WelcomeView: View {
             Spacer()
             Text("No project selected")
                 .font(.system(size: 13))
-                .foregroundStyle(MuxyTheme.textDim)
+                .foregroundStyle(MuxyTheme.fgDim)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

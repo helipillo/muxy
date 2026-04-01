@@ -3,6 +3,8 @@ import SwiftUI
 struct IconButton: View {
     let symbol: String
     var size: CGFloat = 13
+    var color: Color = MuxyTheme.fgMuted
+    var hoverColor: Color = MuxyTheme.fg
     let action: () -> Void
     @State private var hovered = false
 
@@ -10,7 +12,7 @@ struct IconButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(hovered ? MuxyTheme.text : MuxyTheme.textMuted)
+                .foregroundStyle(hovered ? hoverColor : color)
                 .frame(width: 24, height: 24)
         }
         .buttonStyle(.plain)

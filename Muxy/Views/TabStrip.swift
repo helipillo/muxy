@@ -83,11 +83,11 @@ private struct TabCell: View {
             HStack(spacing: 6) {
                 Image(systemName: "terminal")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(active ? MuxyTheme.text : MuxyTheme.textMuted)
+                    .foregroundStyle(active ? MuxyTheme.fg : MuxyTheme.fgMuted)
 
                 Text(title)
                     .font(.system(size: 12))
-                    .foregroundStyle(active ? MuxyTheme.text : MuxyTheme.textMuted)
+                    .foregroundStyle(active ? MuxyTheme.fg : MuxyTheme.fgMuted)
                     .lineLimit(1)
             }
             .padding(.leading, 12)
@@ -97,15 +97,15 @@ private struct TabCell: View {
             .overlay(alignment: .trailing) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(MuxyTheme.textDim)
+                    .foregroundStyle(MuxyTheme.fgDim)
                     .padding(.trailing, 10)
                     .opacity(active || hovered ? 1 : 0)
                     .onTapGesture(perform: onClose)
             }
-            .overlay(alignment: .top) {
+            .overlay(alignment: .bottom) {
                 if active && paneFocused {
                     Rectangle()
-                        .fill(MuxyTheme.accent)
+                        .fill(Color.accentColor)
                         .frame(height: 2)
                 }
             }

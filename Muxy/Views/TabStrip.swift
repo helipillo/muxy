@@ -107,8 +107,35 @@ private struct TabCell: View {
             .contentShape(Rectangle())
             .onTapGesture(perform: onSelect)
             .onHover { hovered = $0 }
+            .overlay(MiddleClickView(action: onClose))
 
             Rectangle().fill(MuxyTheme.border).frame(width: 1)
         }
+    }
+}
+
+private struct MiddleClickView: NSViewRepresentable {
+    let action: () -> Void
+
+    func makeNSView(context: Context) -> MiddleClickNSView {
+        let view = MiddleClickNSView()
+        view.action = action
+        return view
+    }
+
+    func updateNSView(_ nsView: MiddleClickNSView, context: Context) {
+        nsView.action = action
+    }
+}
+
+private final class MiddleClickNSView: NSView {
+    var action: (() -> Void)?
+
+    override func otherMouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 2 else {
+            super.otherMouseDown(with: event)
+            return
+        }
+        action?()
     }
 }

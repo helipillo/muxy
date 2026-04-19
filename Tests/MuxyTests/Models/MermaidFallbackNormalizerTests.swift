@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 
 @testable import Muxy
@@ -62,5 +63,29 @@ struct MermaidFallbackNormalizerTests {
         #expect(output.contains("let text = \"[A\\nB]\""))
         #expect(output.contains("A[Hello<br/>World] --> B"))
         #expect(output.contains("B --> C\\nD"))
+    }
+
+    @Test("MarkdownRenderer html uses mermaid.js only path")
+    @MainActor
+    func markdownRendererUsesMermaidJSOnly() {
+        let markdown = """
+        ```mermaid
+        graph TD
+        A[Hello\\nWorld] --> B
+        ```
+        """
+
+        let html = MarkdownRenderer.html(
+            content: markdown,
+            filePath: nil,
+            bgColor: NSColor.black,
+            fgColor: NSColor.white,
+            accentColor: NSColor.systemBlue
+        )
+
+        #expect(html.contains(".mermaid"))
+        #expect(html.contains("themeVariables:"))
+        #expect(!html.contains("mermaid-native"))
+        #expect(!html.contains("mmdr"))
     }
 }

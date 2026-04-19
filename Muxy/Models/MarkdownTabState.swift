@@ -190,6 +190,84 @@ final class MarkdownTabState {
     }
 }
 
+private struct MermaidThemeVariables: Codable {
+    let primaryColor: String
+    let primaryTextColor: String
+    let primaryBorderColor: String
+    let textColor: String
+    let lineColor: String
+    let secondaryColor: String
+    let tertiaryColor: String
+    let background: String
+    let mainBkg: String
+    let secondBkg: String
+    let tertiaryBkg: String
+    let nodeBorder: String
+    let clusterBkg: String
+    let clusterBorder: String
+    let defaultLinkColor: String
+    let titleColor: String
+    let edgeLabelBackground: String
+    let nodeTextColor: String
+    let labelTextColor: String
+    let noteBkgColor: String
+    let noteTextColor: String
+    let noteBorderColor: String
+    let actorBkg: String
+    let actorBorder: String
+    let actorTextColor: String
+    let actorLineColor: String
+    let signalColor: String
+    let signalTextColor: String
+    let labelBoxBkgColor: String
+    let labelBoxBorderColor: String
+    let loopTextColor: String
+    let activationBorderColor: String
+    let activationBkgColor: String
+    let sequenceNumberColor: String
+    let classText: String
+    let entityBkgColor: String
+    let entityBorderColor: String
+    let entityTextColor: String
+    let sectionBkgColor: String
+    let altSectionBkgColor: String
+    let sectionBkgColor2: String
+    let taskBkgColor: String
+    let taskTextColor: String
+    let taskTextDarkColor: String
+    let taskTextOutsideColor: String
+    let taskTextClickableColor: String
+    let activeTaskBkgColor: String
+    let doneTaskBkgColor: String
+    let doneTaskBorderColor: String
+    let critBorderColor: String
+    let critBkgColor: String
+    let todayLineColor: String
+    let personBorder: String
+    let personBkg: String
+    let pie1: String
+    let pie2: String
+    let pie3: String
+    let pie4: String
+    let pie5: String
+    let pie6: String
+    let pie7: String
+    let pie8: String
+    let pie9: String
+    let pie10: String
+    let pie11: String
+    let pie12: String
+
+    var jsObjectLiteral: String {
+        guard let data = try? JSONEncoder().encode(self),
+              let json = String(data: data, encoding: .utf8)
+        else {
+            return "{}"
+        }
+        return json
+    }
+}
+
 enum MarkdownRenderer {
     @MainActor
     static func html(
@@ -212,81 +290,76 @@ enum MarkdownRenderer {
         let accentSubtleHex = colorToHex(blend(foreground: accentColor, background: bgColor, amount: 0.12))
         let accentMutedHex = colorToHex(blend(foreground: accentColor, background: bgColor, amount: 0.35))
         let accentStrongHex = colorToHex(blend(foreground: accentColor, background: bgColor, amount: 0.5))
-        let mermaidThemeConfig = MermaidNativeRenderer.ThemeConfig(
-            themeVariables: .init(
-                primaryColor: "#\(accentHex)",
-                primaryTextColor: "#\(fgHex)",
-                primaryBorderColor: "#\(borderHex)",
-                textColor: "#\(fgHex)",
-                lineColor: "#\(mutedHex)",
-                secondaryColor: "#\(mermaidSecondaryHex)",
-                tertiaryColor: "#\(mermaidTertiaryHex)",
-                background: "#\(bgHex)",
-                mainBkg: "#\(codeBgHex)",
-                secondBkg: "#\(mermaidSecondaryHex)",
-                tertiaryBkg: "#\(mermaidTertiaryHex)",
-                nodeBorder: "#\(borderHex)",
-                clusterBkg: "#\(mermaidSecondaryHex)",
-                clusterBorder: "#\(borderHex)",
-                defaultLinkColor: "#\(mutedHex)",
-                titleColor: "#\(fgHex)",
-                edgeLabelBackground: "#\(codeBgHex)",
-                nodeTextColor: "#\(fgHex)",
-                labelTextColor: "#\(fgHex)",
-                noteBkgColor: "#\(codeBgHex)",
-                noteTextColor: "#\(fgHex)",
-                noteBorderColor: "#\(borderHex)",
-                actorBkg: "#\(mermaidSecondaryHex)",
-                actorBorder: "#\(borderHex)",
-                actorTextColor: "#\(fgHex)",
-                actorLineColor: "#\(mutedHex)",
-                signalColor: "#\(fgHex)",
-                signalTextColor: "#\(fgHex)",
-                labelBoxBkgColor: "#\(codeBgHex)",
-                labelBoxBorderColor: "#\(borderHex)",
-                loopTextColor: "#\(fgHex)",
-                activationBorderColor: "#\(borderHex)",
-                activationBkgColor: "#\(accentSubtleHex)",
-                sequenceNumberColor: "#\(bgHex)",
-                classText: "#\(fgHex)",
-                entityBkgColor: "#\(codeBgHex)",
-                entityBorderColor: "#\(borderHex)",
-                entityTextColor: "#\(fgHex)",
-                sectionBkgColor: "#\(mermaidSecondaryHex)",
-                altSectionBkgColor: "#\(codeBgHex)",
-                sectionBkgColor2: "#\(mermaidTertiaryHex)",
-                taskBkgColor: "#\(accentSoftHex)",
-                taskTextColor: "#\(fgHex)",
-                taskTextDarkColor: "#\(bgHex)",
-                taskTextOutsideColor: "#\(fgHex)",
-                taskTextClickableColor: "#\(accentHex)",
-                activeTaskBkgColor: "#\(accentMutedHex)",
-                doneTaskBkgColor: "#\(mermaidTertiaryHex)",
-                doneTaskBorderColor: "#\(borderHex)",
-                critBorderColor: "#\(accentStrongHex)",
-                critBkgColor: "#\(accentMutedHex)",
-                todayLineColor: "#\(accentHex)",
-                personBorder: "#\(borderHex)",
-                personBkg: "#\(mermaidSecondaryHex)",
-                pie1: "#\(accentHex)",
-                pie2: "#\(accentMutedHex)",
-                pie3: "#\(mermaidSecondaryHex)",
-                pie4: "#\(mermaidTertiaryHex)",
-                pie5: "#\(accentSoftHex)",
-                pie6: "#\(accentStrongHex)",
-                pie7: "#\(borderHex)",
-                pie8: "#\(mutedHex)",
-                pie9: "#\(codeBgHex)",
-                pie10: "#\(accentSubtleHex)",
-                pie11: "#\(mermaidSecondaryHex)",
-                pie12: "#\(mermaidTertiaryHex)"
-            )
+        let mermaidThemeVariables = MermaidThemeVariables(
+            primaryColor: "#\(accentHex)",
+            primaryTextColor: "#\(fgHex)",
+            primaryBorderColor: "#\(borderHex)",
+            textColor: "#\(fgHex)",
+            lineColor: "#\(mutedHex)",
+            secondaryColor: "#\(mermaidSecondaryHex)",
+            tertiaryColor: "#\(mermaidTertiaryHex)",
+            background: "#\(bgHex)",
+            mainBkg: "#\(codeBgHex)",
+            secondBkg: "#\(mermaidSecondaryHex)",
+            tertiaryBkg: "#\(mermaidTertiaryHex)",
+            nodeBorder: "#\(borderHex)",
+            clusterBkg: "#\(mermaidSecondaryHex)",
+            clusterBorder: "#\(borderHex)",
+            defaultLinkColor: "#\(mutedHex)",
+            titleColor: "#\(fgHex)",
+            edgeLabelBackground: "#\(codeBgHex)",
+            nodeTextColor: "#\(fgHex)",
+            labelTextColor: "#\(fgHex)",
+            noteBkgColor: "#\(codeBgHex)",
+            noteTextColor: "#\(fgHex)",
+            noteBorderColor: "#\(borderHex)",
+            actorBkg: "#\(mermaidSecondaryHex)",
+            actorBorder: "#\(borderHex)",
+            actorTextColor: "#\(fgHex)",
+            actorLineColor: "#\(mutedHex)",
+            signalColor: "#\(fgHex)",
+            signalTextColor: "#\(fgHex)",
+            labelBoxBkgColor: "#\(codeBgHex)",
+            labelBoxBorderColor: "#\(borderHex)",
+            loopTextColor: "#\(fgHex)",
+            activationBorderColor: "#\(borderHex)",
+            activationBkgColor: "#\(accentSubtleHex)",
+            sequenceNumberColor: "#\(bgHex)",
+            classText: "#\(fgHex)",
+            entityBkgColor: "#\(codeBgHex)",
+            entityBorderColor: "#\(borderHex)",
+            entityTextColor: "#\(fgHex)",
+            sectionBkgColor: "#\(mermaidSecondaryHex)",
+            altSectionBkgColor: "#\(codeBgHex)",
+            sectionBkgColor2: "#\(mermaidTertiaryHex)",
+            taskBkgColor: "#\(accentSoftHex)",
+            taskTextColor: "#\(fgHex)",
+            taskTextDarkColor: "#\(bgHex)",
+            taskTextOutsideColor: "#\(fgHex)",
+            taskTextClickableColor: "#\(accentHex)",
+            activeTaskBkgColor: "#\(accentMutedHex)",
+            doneTaskBkgColor: "#\(mermaidTertiaryHex)",
+            doneTaskBorderColor: "#\(borderHex)",
+            critBorderColor: "#\(accentStrongHex)",
+            critBkgColor: "#\(accentMutedHex)",
+            todayLineColor: "#\(accentHex)",
+            personBorder: "#\(borderHex)",
+            personBkg: "#\(mermaidSecondaryHex)",
+            pie1: "#\(accentHex)",
+            pie2: "#\(accentMutedHex)",
+            pie3: "#\(mermaidSecondaryHex)",
+            pie4: "#\(mermaidTertiaryHex)",
+            pie5: "#\(accentSoftHex)",
+            pie6: "#\(accentStrongHex)",
+            pie7: "#\(borderHex)",
+            pie8: "#\(mutedHex)",
+            pie9: "#\(codeBgHex)",
+            pie10: "#\(accentSubtleHex)",
+            pie11: "#\(mermaidSecondaryHex)",
+            pie12: "#\(mermaidTertiaryHex)"
         )
-        let mermaidThemeVariablesJSON = mermaidThemeConfig.themeVariables.jsObjectLiteral
-        let preprocessed = MermaidNativeRenderer.renderCodeBlocks(in: content, themeConfig: mermaidThemeConfig)
-        // Only normalize Mermaid source that remains as fenced code blocks.
-        // Native mmdr-rendered diagrams are already replaced with SVG and are unaffected.
-        let fallbackPreparedContent = MermaidFallbackNormalizer.normalizeMermaidCodeBlocks(in: preprocessed.content)
+        let mermaidThemeVariablesJSON = mermaidThemeVariables.jsObjectLiteral
+        let fallbackPreparedContent = MermaidFallbackNormalizer.normalizeMermaidCodeBlocks(in: content)
         let encodedPayload = Data(fallbackPreparedContent.utf8).base64EncodedString()
 
         let title = escapeForHTML(filePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Markdown")
@@ -399,12 +472,10 @@ enum MarkdownRenderer {
                 .markdown-body ul, .markdown-body ol { padding-left: 2em; margin: 16px 0; }
                 .markdown-body li { margin: 4px 0; }
                 .markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
-                .mermaid-native,
                 .mermaid {
                     width: 100%;
                     margin: 16px 0;
                 }
-                .mermaid-native .mermaid-toolbar,
                 .mermaid .mermaid-toolbar {
                     display: flex;
                     align-items: center;
@@ -414,7 +485,6 @@ enum MarkdownRenderer {
                     font-size: 11px;
                     color: var(--muted);
                 }
-                .mermaid-native .mermaid-btn,
                 .mermaid .mermaid-btn {
                     border: 1px solid var(--border);
                     background: var(--code-bg);
@@ -425,22 +495,18 @@ enum MarkdownRenderer {
                     font-size: 11px;
                     line-height: 1.2;
                 }
-                .mermaid-native .mermaid-btn:hover,
                 .mermaid .mermaid-btn:hover {
                     border-color: var(--accent);
                 }
-                .mermaid-native .mermaid-zoom-label,
                 .mermaid .mermaid-zoom-label {
                     min-width: 42px;
                     text-align: center;
                     color: var(--muted);
                 }
-                .mermaid-native .mermaid-canvas,
                 .mermaid .mermaid-canvas {
                     width: 100%;
                     overflow: auto;
                 }
-                .mermaid-native svg,
                 .mermaid svg {
                     display: block;
                     max-width: 100%;
@@ -448,13 +514,10 @@ enum MarkdownRenderer {
                     height: auto;
                     margin: 0 auto;
                 }
-                .mermaid-native[data-size-mode="natural"] svg,
                 .mermaid[data-size-mode="natural"] svg {
                     max-width: none;
                     width: auto;
                 }
-                .mermaid-native svg[width],
-                .mermaid-native svg[height],
                 .mermaid svg[width],
                 .mermaid svg[height] {
                     max-width: 100%;
@@ -524,8 +587,6 @@ enum MarkdownRenderer {
                 });
 
                 var _mermaidInitialized = false;
-                var _nativeMermaidCount = \(preprocessed.renderedCount);
-                var _nativeMermaidAll = \(preprocessed.totalCount > 0 && preprocessed.totalCount == preprocessed.renderedCount ? "true" : "false");
                 function decodeBase64UTF8(base64) {
                     try {
                         var binary = atob(base64);
@@ -579,9 +640,8 @@ enum MarkdownRenderer {
                     return false;
                 }
                 function initializeMermaidControls() {
-                    var blocks = document.querySelectorAll('.mermaid-native, .mermaid');
+                    var blocks = document.querySelectorAll('.mermaid');
                     blocks.forEach(function(block) {
-                        var isNativeMermaid = block.classList.contains('mermaid-native');
                         var svg = block.querySelector('svg');
                         if (!svg) {
                             return;
@@ -605,7 +665,7 @@ enum MarkdownRenderer {
                         var canvas = existingCanvases[0] || null;
 
                         if (block.dataset.controlsReady === 'true' && toolbar && canvas && canvas.contains(svg)) {
-                            applyNativeMermaidState(block, svg, toolbar);
+                            applyMermaidState(block, svg, toolbar);
                             return;
                         }
 
@@ -630,20 +690,12 @@ enum MarkdownRenderer {
 
                         toolbar = document.createElement('div');
                         toolbar.className = 'mermaid-toolbar';
-                        if (isNativeMermaid) {
-                            toolbar.innerHTML = '' +
-                                '<button class="mermaid-btn" data-action="toggle-size">Natural</button>' +
-                                '<button class="mermaid-btn" data-action="zoom-out">-</button>' +
-                                '<span class="mermaid-zoom-label">100%</span>' +
-                                '<button class="mermaid-btn" data-action="zoom-in">+</button>' +
-                                '<button class="mermaid-btn" data-action="zoom-reset">Reset</button>';
-                        } else {
-                            toolbar.innerHTML = '' +
-                                '<button class="mermaid-btn" data-action="zoom-out">-</button>' +
-                                '<span class="mermaid-zoom-label">100%</span>' +
-                                '<button class="mermaid-btn" data-action="zoom-in">+</button>' +
-                                '<button class="mermaid-btn" data-action="zoom-reset">Reset</button>';
-                        }
+                        toolbar.innerHTML = '' +
+                            '<button class="mermaid-btn" data-action="toggle-size">Natural</button>' +
+                            '<button class="mermaid-btn" data-action="zoom-out">-</button>' +
+                            '<span class="mermaid-zoom-label">100%</span>' +
+                            '<button class="mermaid-btn" data-action="zoom-in">+</button>' +
+                            '<button class="mermaid-btn" data-action="zoom-reset">Reset</button>';
 
                         block.insertBefore(toolbar, canvas);
 
@@ -657,7 +709,6 @@ enum MarkdownRenderer {
                         }
 
                         block.dataset.controlsReady = 'true';
-                        block.dataset.allowNaturalSize = isNativeMermaid ? 'true' : 'false';
                         block.dataset.sizeMode = 'fit';
                         block.dataset.zoom = '1';
                         block.dataset.naturalWidth = String(naturalWidth);
@@ -692,25 +743,19 @@ enum MarkdownRenderer {
                             }
 
                             block.dataset.zoom = String(zoom);
-                            applyNativeMermaidState(block, svg, toolbar);
+                            applyMermaidState(block, svg, toolbar);
                         });
 
-                        applyNativeMermaidState(block, svg, toolbar);
+                        applyMermaidState(block, svg, toolbar);
                     });
                 }
 
-                function applyNativeMermaidState(block, svg, toolbar) {
+                function applyMermaidState(block, svg, toolbar) {
                     var mode = block.dataset.sizeMode || 'fit';
-                    var allowNaturalSize = block.dataset.allowNaturalSize === 'true';
                     var zoom = parseFloat(block.dataset.zoom || '1');
                     var naturalWidth = parseFloat(block.dataset.naturalWidth || '800');
                     var toggleBtn = toolbar.querySelector('[data-action="toggle-size"]');
                     var zoomLabel = toolbar.querySelector('.mermaid-zoom-label');
-
-                    if (!allowNaturalSize && mode !== 'fit') {
-                        mode = 'fit';
-                        block.dataset.sizeMode = mode;
-                    }
 
                     if (mode === 'fit') {
                         svg.style.width = (zoom * 100).toFixed(1).replace('.0', '') + '%';
@@ -745,7 +790,7 @@ enum MarkdownRenderer {
 
                     // Replace mermaid code blocks before marked parses them (fallback path)
                     var diagramMap = {};
-                    content = content.replace(/```mermaid\\n([\\s\\S]*?)```/g, function(match, code) {
+                    content = content.replace(/```mermaid\\s*\\r?\\n([\\s\\S]*?)```/g, function(match, code) {
                         var id = 'mermaid-' + Object.keys(diagramMap).length;
                         diagramMap[id] = code.trim();
                         return '<div class=\"mermaid\" id=\"' + id + '\"></div>';
@@ -763,9 +808,6 @@ enum MarkdownRenderer {
                     // Render mermaid diagrams
                     if (Object.keys(diagramMap).length > 0) {
                         try {
-                            if (_nativeMermaidAll) {
-                                return;
-                            }
                             var mermaidReady = await ensureMermaidLoaded();
                             if (mermaidReady && typeof mermaid !== 'undefined') {
                                 if (!_mermaidInitialized) {
@@ -933,240 +975,6 @@ enum MermaidFallbackNormalizer {
         }
 
         return output
-    }
-}
-
-@MainActor
-private enum MermaidNativeRenderer {
-    struct ThemeConfig: Codable {
-        struct ThemeVariables: Codable {
-            let primaryColor: String
-            let primaryTextColor: String
-            let primaryBorderColor: String
-            let textColor: String
-            let lineColor: String
-            let secondaryColor: String
-            let tertiaryColor: String
-            let background: String
-            let mainBkg: String
-            let secondBkg: String
-            let tertiaryBkg: String
-            let nodeBorder: String
-            let clusterBkg: String
-            let clusterBorder: String
-            let defaultLinkColor: String
-            let titleColor: String
-            let edgeLabelBackground: String
-            let nodeTextColor: String
-            let labelTextColor: String
-            let noteBkgColor: String
-            let noteTextColor: String
-            let noteBorderColor: String
-            let actorBkg: String
-            let actorBorder: String
-            let actorTextColor: String
-            let actorLineColor: String
-            let signalColor: String
-            let signalTextColor: String
-            let labelBoxBkgColor: String
-            let labelBoxBorderColor: String
-            let loopTextColor: String
-            let activationBorderColor: String
-            let activationBkgColor: String
-            let sequenceNumberColor: String
-            let classText: String
-            let entityBkgColor: String
-            let entityBorderColor: String
-            let entityTextColor: String
-            let sectionBkgColor: String
-            let altSectionBkgColor: String
-            let sectionBkgColor2: String
-            let taskBkgColor: String
-            let taskTextColor: String
-            let taskTextDarkColor: String
-            let taskTextOutsideColor: String
-            let taskTextClickableColor: String
-            let activeTaskBkgColor: String
-            let doneTaskBkgColor: String
-            let doneTaskBorderColor: String
-            let critBorderColor: String
-            let critBkgColor: String
-            let todayLineColor: String
-            let personBorder: String
-            let personBkg: String
-            let pie1: String
-            let pie2: String
-            let pie3: String
-            let pie4: String
-            let pie5: String
-            let pie6: String
-            let pie7: String
-            let pie8: String
-            let pie9: String
-            let pie10: String
-            let pie11: String
-            let pie12: String
-
-            var jsObjectLiteral: String {
-                guard let data = try? JSONEncoder().encode(self),
-                      let json = String(data: data, encoding: .utf8)
-                else {
-                    return "{}"
-                }
-                return json
-            }
-        }
-
-        let theme: String
-        let themeVariables: ThemeVariables
-
-        init(theme: String = "base", themeVariables: ThemeVariables) {
-            self.theme = theme
-            self.themeVariables = themeVariables
-        }
-
-        var cacheKey: String {
-            guard let data = try? JSONEncoder().encode(themeVariables),
-                  let json = String(data: data, encoding: .utf8)
-            else {
-                return theme
-            }
-            return "\(theme)|\(json)"
-        }
-    }
-
-    struct Result {
-        let content: String
-        let renderedCount: Int
-        let totalCount: Int
-    }
-
-    private static let regex = try? NSRegularExpression(
-        pattern: "```mermaid\\s*\\n([\\s\\S]*?)```",
-        options: []
-    )
-
-    private static var cache: [String: String] = [:]
-    private static var cacheInsertionOrder: [String] = []
-    private static let maxCacheEntries = 256
-
-    static func renderCodeBlocks(in markdown: String, themeConfig: ThemeConfig) -> Result {
-        guard let regex else { return Result(content: markdown, renderedCount: 0, totalCount: 0) }
-
-        let nsMarkdown = markdown as NSString
-        let range = NSRange(location: 0, length: nsMarkdown.length)
-        let matches = regex.matches(in: markdown, options: [], range: range)
-        guard !matches.isEmpty else { return Result(content: markdown, renderedCount: 0, totalCount: 0) }
-
-        var rendered = markdown
-        var replaced = 0
-
-        for match in matches.reversed() {
-            guard match.numberOfRanges >= 2 else { continue }
-            let blockRange = match.range(at: 0)
-            let codeRange = match.range(at: 1)
-            guard codeRange.location != NSNotFound,
-                  let swiftRange = Range(codeRange, in: markdown)
-            else { continue }
-
-            let diagramSource = String(markdown[swiftRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !diagramSource.isEmpty else { continue }
-
-            if let svg = renderSVG(for: diagramSource, themeConfig: themeConfig) {
-                let replacement = "<div class=\"mermaid-native\">\(svg)</div>"
-                if let replaceRange = Range(blockRange, in: rendered) {
-                    rendered.replaceSubrange(replaceRange, with: replacement)
-                    replaced += 1
-                }
-            }
-        }
-
-        if replaced > 0 {
-            markdownLogger.debug("Rendered mermaid via mmdr count=\(replaced)")
-        }
-
-        return Result(content: rendered, renderedCount: replaced, totalCount: matches.count)
-    }
-
-    private static func renderSVG(for diagram: String, themeConfig: ThemeConfig) -> String? {
-        let cacheKey = "\(themeConfig.cacheKey)\n\(diagram)"
-        if let cached = cache[cacheKey] {
-            return cached
-        }
-
-        guard let configFileURL = writeTempConfigFile(themeConfig) else {
-            return nil
-        }
-        defer {
-            try? FileManager.default.removeItem(at: configFileURL)
-        }
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["mmdr", "-e", "svg", "--preferredAspectRatio", "16:9", "-c", configFileURL.path]
-
-        let stdin = Pipe()
-        let stdout = Pipe()
-        let stderr = Pipe()
-
-        process.standardInput = stdin
-        process.standardOutput = stdout
-        process.standardError = stderr
-
-        do {
-            try process.run()
-
-            if let data = (diagram + "\n").data(using: .utf8) {
-                stdin.fileHandleForWriting.write(data)
-            }
-            try? stdin.fileHandleForWriting.close()
-
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else {
-                let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-                let errText = String(data: errData, encoding: .utf8) ?? "mmdr failed"
-                markdownLogger.error("mmdr render failed reason=\(errText, privacy: .public)")
-                return nil
-            }
-
-            let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-            guard let svg = String(data: outData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  svg.contains("<svg")
-            else {
-                markdownLogger.error("mmdr render produced invalid svg output")
-                return nil
-            }
-
-            cache[cacheKey] = svg
-            cacheInsertionOrder.append(cacheKey)
-            if cacheInsertionOrder.count > maxCacheEntries {
-                let overflow = cacheInsertionOrder.count - maxCacheEntries
-                for _ in 0..<overflow {
-                    let oldestKey = cacheInsertionOrder.removeFirst()
-                    cache.removeValue(forKey: oldestKey)
-                }
-            }
-            return svg
-        } catch {
-            markdownLogger.debug("mmdr unavailable, falling back to JS renderer reason=\(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-    }
-
-    private static func writeTempConfigFile(_ themeConfig: ThemeConfig) -> URL? {
-        let fileURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("muxy-mmdr-theme-\(UUID().uuidString)")
-            .appendingPathExtension("json")
-
-        do {
-            let data = try JSONEncoder().encode(themeConfig)
-            try data.write(to: fileURL, options: [.atomic])
-            return fileURL
-        } catch {
-            markdownLogger.error("Failed writing mmdr config file reason=\(error.localizedDescription, privacy: .public)")
-            return nil
-        }
     }
 }
 

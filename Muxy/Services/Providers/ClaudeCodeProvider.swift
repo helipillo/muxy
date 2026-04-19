@@ -1,7 +1,7 @@
 import Foundation
 
 struct ClaudeCodeProvider: AIProviderIntegration {
-    let id = "claude_code"
+    let id = "claude"
     let displayName = "Claude Code"
     let socketTypeKey = "claude_hook"
     let iconName = "sparkles"

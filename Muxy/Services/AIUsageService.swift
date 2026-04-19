@@ -188,7 +188,6 @@ enum AIUsageProviderCatalog {
     }
 
     private static let openUsageSeedProviders: [AIUsageProviderCatalogEntry] = [
-        .init(id: "claude", displayName: "Claude", iconName: "sparkles", source: .openUsage),
         .init(id: "codex", displayName: "Codex", iconName: "sparkles", source: .openUsage),
         .init(id: "copilot", displayName: "Copilot", iconName: "sparkles", source: .openUsage),
         .init(id: "cursor", displayName: "Cursor", iconName: "sparkles", source: .openUsage),
@@ -210,6 +209,18 @@ enum AIUsageProviderCatalog {
         .init(id: "zai", displayName: "Z.ai", iconName: "sparkles", source: .openUsage),
         .init(id: "perplexity", displayName: "Perplexity", iconName: "sparkles", source: .openUsage),
     ]
+
+    private static let legacyProviderIDMapping: [String: String] = [
+        "claude_code": "claude",
+    ]
+
+    private static func canonicalID(for rawID: String) -> String {
+        legacyProviderIDMapping[rawID] ?? rawID
+    }
+
+    static func canonicalID(for providerID: String, source: AIUsageProviderCatalogSource) -> String {
+        source == .native ? canonicalID(for: providerID) : providerID
+    }
 }
 
 enum AIUsageSnapshotComposer {
@@ -427,7 +438,7 @@ enum AIUsageFetcher {
 
     private static func fetchSnapshot(for provider: AIProviderUsageDescriptor) async -> AIProviderUsageSnapshot {
         switch provider.providerID {
-        case "claude_code":
+        case "claude":
             return await ClaudeUsageAPIClient.fetchSnapshot(for: provider)
         case "opencode":
             return AIProviderUsageSnapshot(

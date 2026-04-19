@@ -14,7 +14,7 @@ struct AIUsageServiceTests {
         }
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        let providerID = "claude_code"
+        let providerID = "claude"
 
         #expect(!AIUsageProviderTrackingStore.isTracked(providerID: providerID, defaults: defaults))
         #expect(!AIUsageProviderTrackingStore.hasTrackedPreference(providerID: providerID, defaults: defaults))

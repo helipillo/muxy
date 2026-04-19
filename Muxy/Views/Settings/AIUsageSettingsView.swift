@@ -80,7 +80,7 @@ struct AIUsageSettingsView: View {
             Text(provider.displayName)
                 .font(.system(size: 12))
 
-            Text(provider.isNative ? "Native" : "OpenUsage")
+            Text(provider.isNative ? "Native" : "Bridge")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 6)

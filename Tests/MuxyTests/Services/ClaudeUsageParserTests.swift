@@ -46,4 +46,21 @@ struct ClaudeUsageParserTests {
         #expect(rows[1].resetDate != nil)
         #expect(rows[2].resetDate != nil)
     }
+
+    @Test("ignores windows without meaningful usage information")
+    func ignoresMeaninglessWindows() throws {
+        let json = """
+        {
+          "five_hour": {
+            "unexpected": true
+          },
+          "seven_day": {
+            "reset_at": null
+          }
+        }
+        """
+
+        let rows = try ClaudeUsageParser.parseMetricRows(from: Data(json.utf8))
+        #expect(rows.isEmpty)
+    }
 }

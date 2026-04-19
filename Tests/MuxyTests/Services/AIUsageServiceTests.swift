@@ -139,6 +139,55 @@ struct AIUsageServiceTests {
         #expect(AIUsageAutoRefreshInterval.oneHour.label == "1h")
     }
 
+
+
+    @Test("tracking preferences canonicalize legacy provider IDs")
+    func trackingCanonicalizesLegacyProviderIDs() {
+        let suiteName = "AIUsageServiceTests.CanonicalTracking.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            Issue.record("Unable to create isolated UserDefaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        AIUsageProviderTrackingStore.setTracked(true, providerID: "claude_code", defaults: defaults)
+
+        #expect(AIUsageProviderTrackingStore.isTracked(providerID: "claude", defaults: defaults))
+        #expect(AIUsageProviderTrackingStore.hasTrackedPreference(providerID: "claude", defaults: defaults))
+    }
+
+    @Test("snapshot merger deduplicates canonical provider IDs")
+    func snapshotMergerDeduplicatesCanonicalProviderIDs() {
+        let nativeSnapshots = [
+            AIProviderUsageSnapshot(
+                providerID: "claude",
+                providerName: "Claude",
+                providerIconName: "sparkles",
+                state: .available,
+                rows: [AIUsageMetricRow(label: "5h", percent: 25, resetDate: nil, detail: "25/100")]
+            ),
+        ]
+
+        let openUsageSnapshots = [
+            AIProviderUsageSnapshot(
+                providerID: "claude_code",
+                providerName: "Claude Code",
+                providerIconName: "sparkles",
+                state: .available,
+                rows: [AIUsageMetricRow(label: "Monthly", percent: 50, resetDate: nil, detail: "50/100")]
+            ),
+        ]
+
+        let merged = AIUsageSnapshotMerger.merge(
+            nativeSnapshots: nativeSnapshots,
+            openUsageSnapshots: openUsageSnapshots
+        )
+
+        #expect(merged.count == 1)
+        #expect(merged[0].providerID == "claude")
+    }
+
+
     @Test("compose snapshots includes tracked disabled non-native providers with Disabled state")
     func composeSnapshotsIncludesDisabledNonNativeProviderState() {
         let trackedProviders = [

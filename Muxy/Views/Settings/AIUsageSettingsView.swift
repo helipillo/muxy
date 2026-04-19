@@ -101,39 +101,13 @@ struct AIUsageSettingsView: View {
     private func providerToggleBinding(for provider: AIUsageProviderCatalogEntry) -> Binding<Bool> {
         Binding(
             get: {
-                isProviderToggleOn(provider)
+                AIUsageProviderTrackingStore.isTracked(providerID: provider.id)
             },
             set: { isOn in
-                let nativeProvider = provider.isNative ? AIUsageProviderCatalog.nativeProvider(providerID: provider.id) : nil
-                let wasEnabled = nativeProvider?.isEnabled ?? AIUsageProviderEnabledStore.isEnabled(providerID: provider.id)
-
                 AIUsageProviderTrackingStore.setTracked(isOn, providerID: provider.id)
-
-                if provider.isNative {
-                    if wasEnabled != isOn {
-                        nativeProvider?.isEnabled = isOn
-                        AIProviderRegistry.shared.installAll()
-                    }
-                } else {
-                    if wasEnabled != isOn {
-                        AIUsageProviderEnabledStore.setEnabled(isOn, providerID: provider.id)
-                    }
-                }
+                usageService.recomposeSnapshots()
             }
         )
-    }
-
-    private func isProviderToggleOn(_ provider: AIUsageProviderCatalogEntry) -> Bool {
-        let tracked = AIUsageProviderTrackingStore.isTracked(providerID: provider.id)
-        let enabled: Bool
-
-        if provider.isNative {
-            enabled = AIUsageProviderCatalog.nativeProvider(providerID: provider.id)?.isEnabled ?? false
-        } else {
-            enabled = AIUsageProviderEnabledStore.isEnabled(providerID: provider.id)
-        }
-
-        return tracked && enabled
     }
 
     private func refreshUsage() {

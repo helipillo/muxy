@@ -3,6 +3,16 @@ import os
 
 private let usageLogger = Logger(subsystem: "app.muxy", category: "AIUsageService")
 
+private func canonicalAIUsageProviderID(_ providerID: String) -> String {
+    let normalized = providerID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    switch normalized {
+    case "claude_code":
+        return "claude"
+    default:
+        return normalized
+    }
+}
+
 struct AIProviderUsageDescriptor: Sendable {
     let providerID: String
     let providerName: String
@@ -18,7 +28,7 @@ struct AITrackedProviderUsageDescriptor: Equatable, Sendable {
 
 enum AIUsageProviderTrackingStore {
     static func trackingKey(providerID: String) -> String {
-        "muxy.usage.provider.\(providerID).tracked"
+        "muxy.usage.provider.\(canonicalAIUsageProviderID(providerID)).tracked"
     }
 
     static func trackedPreference(providerID: String, defaults: UserDefaults = .standard) -> Bool? {
@@ -60,7 +70,7 @@ enum AIUsageAutoTracking {
 
 enum AIUsageProviderEnabledStore {
     static func enabledKey(providerID: String) -> String {
-        "muxy.usage.provider.\(providerID).enabled"
+        "muxy.usage.provider.\(canonicalAIUsageProviderID(providerID)).enabled"
     }
 
     static func isEnabled(providerID: String, defaults: UserDefaults = .standard) -> Bool {
@@ -146,7 +156,7 @@ enum AIUsageProviderCatalog {
     static let providers: [AIUsageProviderCatalogEntry] = {
         let native = AIProviderRegistry.shared.providers.map {
             AIUsageProviderCatalogEntry(
-                id: $0.id,
+                id: canonicalAIUsageProviderID($0.id),
                 displayName: $0.displayName,
                 iconName: $0.iconName,
                 source: .native
@@ -170,21 +180,21 @@ enum AIUsageProviderCatalog {
     }()
 
     private static let providerByID: [String: AIUsageProviderCatalogEntry] =
-        Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0) })
+        Dictionary(uniqueKeysWithValues: providers.map { (canonicalAIUsageProviderID($0.id), $0) })
 
     private static let nativeProviderByID: [String: any AIProviderIntegration] =
-        Dictionary(uniqueKeysWithValues: AIProviderRegistry.shared.providers.map { ($0.id, $0) })
+        Dictionary(uniqueKeysWithValues: AIProviderRegistry.shared.providers.map { (canonicalAIUsageProviderID($0.id), $0) })
 
     static func entry(providerID: String) -> AIUsageProviderCatalogEntry? {
-        providerByID[providerID]
+        providerByID[canonicalAIUsageProviderID(providerID)]
     }
 
     static func isNativeProvider(providerID: String) -> Bool {
-        nativeProviderByID[providerID] != nil
+        nativeProviderByID[canonicalAIUsageProviderID(providerID)] != nil
     }
 
     static func nativeProvider(providerID: String) -> (any AIProviderIntegration)? {
-        nativeProviderByID[providerID]
+        nativeProviderByID[canonicalAIUsageProviderID(providerID)]
     }
 
     private static let openUsageSeedProviders: [AIUsageProviderCatalogEntry] = [
@@ -210,16 +220,8 @@ enum AIUsageProviderCatalog {
         .init(id: "perplexity", displayName: "Perplexity", iconName: "sparkles", source: .openUsage),
     ]
 
-    private static let legacyProviderIDMapping: [String: String] = [
-        "claude_code": "claude",
-    ]
-
-    private static func canonicalID(for rawID: String) -> String {
-        legacyProviderIDMapping[rawID] ?? rawID
-    }
-
-    static func canonicalID(for providerID: String, source: AIUsageProviderCatalogSource) -> String {
-        source == .native ? canonicalID(for: providerID) : providerID
+    static func canonicalID(for providerID: String, source _: AIUsageProviderCatalogSource) -> String {
+        canonicalAIUsageProviderID(providerID)
     }
 }
 
@@ -228,7 +230,7 @@ enum AIUsageSnapshotComposer {
         trackedProviders: [AITrackedProviderUsageDescriptor],
         fetchedSnapshots: [AIProviderUsageSnapshot]
     ) -> [AIProviderUsageSnapshot] {
-        let snapshotByProviderID = Dictionary(uniqueKeysWithValues: fetchedSnapshots.map { ($0.providerID, $0) })
+        let snapshotByProviderID = Dictionary(uniqueKeysWithValues: fetchedSnapshots.map { (canonicalAIUsageProviderID($0.providerID), $0) })
 
         return trackedProviders.map { provider in
             if !provider.isEnabled {
@@ -241,7 +243,7 @@ enum AIUsageSnapshotComposer {
                 )
             }
 
-            if let snapshot = snapshotByProviderID[provider.providerID] {
+            if let snapshot = snapshotByProviderID[canonicalAIUsageProviderID(provider.providerID)] {
                 return snapshot
             }
 
@@ -261,8 +263,8 @@ enum AIUsageSnapshotMerger {
         nativeSnapshots: [AIProviderUsageSnapshot],
         openUsageSnapshots: [AIProviderUsageSnapshot]
     ) -> [AIProviderUsageSnapshot] {
-        let nativeIDs = Set(nativeSnapshots.map(\.providerID))
-        let filteredOpenUsage = openUsageSnapshots.filter { !nativeIDs.contains($0.providerID) }
+        let nativeIDs = Set(nativeSnapshots.map { canonicalAIUsageProviderID($0.providerID) })
+        let filteredOpenUsage = openUsageSnapshots.filter { !nativeIDs.contains(canonicalAIUsageProviderID($0.providerID)) }
         return nativeSnapshots + filteredOpenUsage
     }
 }
@@ -281,6 +283,7 @@ final class AIUsageService {
     }
 
     @ObservationIgnored private var refreshTask: Task<[AIProviderUsageSnapshot], Never>?
+    @ObservationIgnored private var fetchedSnapshotsCache: [AIProviderUsageSnapshot] = []
 
     private init() {}
 
@@ -376,19 +379,9 @@ final class AIUsageService {
         let fetchedSnapshots = await task.value
         AIUsageAutoTracking.autoTrackProvidersWithAvailableUsage(snapshots: fetchedSnapshots)
 
-        let updatedPreferences = ProviderRuntimePreferences(catalogProviders: catalogProviders)
-        let trackedProviders = catalogProviders.compactMap { provider -> AITrackedProviderUsageDescriptor? in
-            guard updatedPreferences.trackedProviderIDs.contains(provider.id) else { return nil }
-            return AITrackedProviderUsageDescriptor(
-                providerID: provider.id,
-                providerName: provider.displayName,
-                providerIconName: provider.iconName,
-                isEnabled: updatedPreferences.enabledByProviderID[provider.id] ?? false
-            )
-        }
-
-        let composedSnapshots = AIUsageSnapshotComposer.compose(
-            trackedProviders: trackedProviders,
+        fetchedSnapshotsCache = fetchedSnapshots
+        let composedSnapshots = composeSnapshots(
+            catalogProviders: catalogProviders,
             fetchedSnapshots: fetchedSnapshots
         )
 
@@ -403,6 +396,39 @@ final class AIUsageService {
 
         let interval = AIUsageSettingsStore.autoRefreshInterval()
         return date.timeIntervalSince(lastRefreshDate) >= interval.timeInterval
+    }
+
+
+    func recomposeSnapshots() {
+        let catalogProviders = AIUsageProviderCatalog.providers
+        let recomposed = composeSnapshots(
+            catalogProviders: catalogProviders,
+            fetchedSnapshots: fetchedSnapshotsCache
+        )
+        if snapshots != recomposed {
+            snapshots = recomposed
+        }
+    }
+
+    private func composeSnapshots(
+        catalogProviders: [AIUsageProviderCatalogEntry],
+        fetchedSnapshots: [AIProviderUsageSnapshot]
+    ) -> [AIProviderUsageSnapshot] {
+        let updatedPreferences = ProviderRuntimePreferences(catalogProviders: catalogProviders)
+        let trackedProviders = catalogProviders.compactMap { provider -> AITrackedProviderUsageDescriptor? in
+            guard updatedPreferences.trackedProviderIDs.contains(provider.id) else { return nil }
+            return AITrackedProviderUsageDescriptor(
+                providerID: provider.id,
+                providerName: provider.displayName,
+                providerIconName: provider.iconName,
+                isEnabled: updatedPreferences.enabledByProviderID[provider.id] ?? false
+            )
+        }
+
+        return AIUsageSnapshotComposer.compose(
+            trackedProviders: trackedProviders,
+            fetchedSnapshots: fetchedSnapshots
+        )
     }
 
     private func fetchOpenUsageSnapshotsIfEnabled(
@@ -513,12 +539,13 @@ enum OpenUsageAPIClient {
         }
 
         return rawSnapshots.compactMap { rawSnapshot in
-            guard let providerID = extractString(from: rawSnapshot, keys: ["providerId", "provider_id", "provider", "id"]),
-                  !providerID.isEmpty
+            guard let rawProviderID = extractString(from: rawSnapshot, keys: ["providerId", "provider_id", "provider", "id"]),
+                  !rawProviderID.isEmpty
             else {
                 return nil
             }
 
+            let providerID = canonicalAIUsageProviderID(rawProviderID)
             let catalogEntry = catalogByProviderID[providerID]
             let providerName = catalogEntry?.displayName
                 ?? extractString(from: rawSnapshot, keys: ["providerName", "provider_name", "name", "title"])

@@ -29,6 +29,8 @@ enum ClaudeUsageParser {
             let resetDate = date(in: window, keys: ["reset_at", "resets_at", "resetAt", "reset", "window_end"])
             let detail = usageDetail(used: used, limit: limit)
 
+            guard percent != nil || resetDate != nil || detail != nil else { continue }
+
             rows.append(
                 AIUsageMetricRow(
                     label: definition.label,

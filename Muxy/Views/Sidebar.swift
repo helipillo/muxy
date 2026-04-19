@@ -20,9 +20,13 @@ struct Sidebar: View {
     var body: some View {
         VStack(spacing: 0) {
             projectList
-            Spacer(minLength: 0)
+                .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
+                .clipped()
+
             SidebarFooter(expanded: expanded)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxHeight: .infinity, alignment: .bottom)
         .frame(width: SidebarLayout.resolvedWidth(expanded: expanded))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sidebar")
@@ -238,6 +242,10 @@ struct SidebarFooter: View {
     var expanded: Bool = false
     @State private var showThemePicker = false
     @State private var showNotifications = false
+    @State private var showAIUsagePopover = false
+    @State private var usageService = AIUsageService.shared
+
+    private let usageRefreshTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     private var notificationStore: NotificationStore { NotificationStore.shared }
 
@@ -247,6 +255,14 @@ struct SidebarFooter: View {
                 expandedFooter
             } else {
                 collapsedFooter
+            }
+        }
+        .task {
+            await usageService.refreshIfNeeded()
+        }
+        .onReceive(usageRefreshTimer) { _ in
+            Task {
+                await usageService.refreshIfNeeded()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .toggleThemePicker)) { _ in
@@ -261,12 +277,34 @@ struct SidebarFooter: View {
         NotificationCenter.default.post(name: .toggleSidebar, object: nil)
     }
 
+    private var sidebarToggleLabel: String {
+        expanded ? "Collapse Sidebar" : "Expand Sidebar"
+    }
+
+    private var sidebarToggleIcon: String {
+        "sidebar.left"
+    }
+
     private var notificationBellIcon: String {
         notificationStore.unreadCount > 0 ? "bell.badge" : "bell"
     }
 
+    private var aiUsageIcon: String {
+        usageService.isRefreshing ? "arrow.clockwise" : "sparkles"
+    }
+
     private var collapsedFooter: some View {
         VStack(spacing: 4) {
+            IconButton(symbol: aiUsageIcon, accessibilityLabel: "AI Usage") { showAIUsagePopover.toggle() }
+                .help("AI Usage")
+                .popover(isPresented: $showAIUsagePopover) {
+                    AIUsagePanel(
+                        snapshots: usageService.snapshots,
+                        isRefreshing: usageService.isRefreshing,
+                        lastRefreshDate: usageService.lastRefreshDate,
+                        onRefresh: refreshUsage
+                    )
+                }
             IconButton(symbol: notificationBellIcon, accessibilityLabel: "Notifications") { showNotifications.toggle() }
                 .help("Notifications")
                 .popover(isPresented: $showNotifications) {
@@ -275,17 +313,29 @@ struct SidebarFooter: View {
             IconButton(symbol: "paintpalette", accessibilityLabel: "Theme Picker") { showThemePicker.toggle() }
                 .help("Theme Picker (\(KeyBindingStore.shared.combo(for: .toggleThemePicker).displayString))")
                 .popover(isPresented: $showThemePicker) { ThemePicker() }
-            IconButton(symbol: "sidebar.left", accessibilityLabel: "Expand Sidebar") { postToggleSidebar() }
-                .help("Expand Sidebar (\(KeyBindingStore.shared.combo(for: .toggleSidebar).displayString))")
+            IconButton(symbol: sidebarToggleIcon, accessibilityLabel: sidebarToggleLabel) { postToggleSidebar() }
+                .help("\(sidebarToggleLabel) (\(KeyBindingStore.shared.combo(for: .toggleSidebar).displayString))")
         }
         .padding(.bottom, 8)
     }
 
     private var expandedFooter: some View {
         HStack(spacing: 4) {
-            IconButton(symbol: "sidebar.left", accessibilityLabel: "Collapse Sidebar") { postToggleSidebar() }
-                .help("Collapse Sidebar (\(KeyBindingStore.shared.combo(for: .toggleSidebar).displayString))")
+            IconButton(symbol: sidebarToggleIcon, accessibilityLabel: sidebarToggleLabel) { postToggleSidebar() }
+                .help("\(sidebarToggleLabel) (\(KeyBindingStore.shared.combo(for: .toggleSidebar).displayString))")
+
             Spacer()
+
+            IconButton(symbol: aiUsageIcon, accessibilityLabel: "AI Usage") { showAIUsagePopover.toggle() }
+                .help("AI Usage")
+                .popover(isPresented: $showAIUsagePopover) {
+                    AIUsagePanel(
+                        snapshots: usageService.snapshots,
+                        isRefreshing: usageService.isRefreshing,
+                        lastRefreshDate: usageService.lastRefreshDate,
+                        onRefresh: refreshUsage
+                    )
+                }
             IconButton(symbol: notificationBellIcon, accessibilityLabel: "Notifications") { showNotifications.toggle() }
                 .help("Notifications")
                 .popover(isPresented: $showNotifications) {
@@ -297,5 +347,146 @@ struct SidebarFooter: View {
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 8)
+    }
+
+    private func refreshUsage() {
+        Task {
+            await usageService.refresh(force: true)
+        }
+    }
+}
+
+private struct AIUsagePanel: View {
+    let snapshots: [AIProviderUsageSnapshot]
+    let isRefreshing: Bool
+    let lastRefreshDate: Date?
+    let onRefresh: () -> Void
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(MuxyTheme.fgMuted)
+                Text("AI Usage")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(MuxyTheme.fgMuted)
+                Spacer()
+                Button(action: onRefresh) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(MuxyTheme.fgMuted)
+                .disabled(isRefreshing)
+                .help("Refresh usage")
+                if isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.65)
+                } else if let lastRefreshDate {
+                    Text(Self.relativeFormatter.localizedString(for: lastRefreshDate, relativeTo: Date()))
+                        .font(.system(size: 9))
+                        .foregroundStyle(MuxyTheme.fgDim)
+                }
+            }
+
+            if snapshots.isEmpty {
+                Text(isRefreshing ? "Refreshing usage data..." : "No usage data yet.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(MuxyTheme.fgDim)
+            }
+
+            if !snapshots.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(snapshots) { snapshot in
+                        AIProviderUsageView(snapshot: snapshot)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(MuxyTheme.surface, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct AIProviderUsageView: View {
+    let snapshot: AIProviderUsageSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: snapshot.providerIconName)
+                    .font(.system(size: 9))
+                    .foregroundStyle(MuxyTheme.fgMuted)
+                Text(snapshot.providerName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(MuxyTheme.fg)
+            }
+
+            switch snapshot.state {
+            case .available:
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(snapshot.rows) { row in
+                        AIUsageMetricRowView(row: row)
+                    }
+                }
+            case let .unavailable(message), let .error(message):
+                Text(message)
+                    .font(.system(size: 10))
+                    .foregroundStyle(MuxyTheme.fgDim)
+            }
+        }
+    }
+}
+
+private struct AIUsageMetricRowView: View {
+    let row: AIUsageMetricRow
+
+    private static let resetFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Text(row.label)
+                    .font(.system(size: 10))
+                    .foregroundStyle(MuxyTheme.fgMuted)
+                Spacer()
+                if let percent = row.percent {
+                    Text("\(Int(percent.rounded()))%")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(MuxyTheme.fg)
+                }
+                if let detail = row.detail {
+                    Text(detail)
+                        .font(.system(size: 9))
+                        .foregroundStyle(MuxyTheme.fgDim)
+                }
+            }
+
+            if let percent = row.percent {
+                ProgressView(value: percent, total: 100)
+                    .tint(MuxyTheme.accent)
+                    .controlSize(.mini)
+            }
+
+            if let resetDate = row.resetDate {
+                Text("Resets \(Self.resetFormatter.string(from: resetDate))")
+                    .font(.system(size: 9))
+                    .foregroundStyle(MuxyTheme.fgDim)
+            }
+        }
     }
 }

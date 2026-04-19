@@ -56,21 +56,11 @@ private final class CodeEditorTextView: NSTextView {
         }
 
         let clipBounds = scrollView.contentView.bounds
-        let visibleMinX = clipBounds.origin.x
-        let visibleMaxX = visibleMinX + clipBounds.width
         let visibleMinY = clipBounds.origin.y
         let visibleMaxY = visibleMinY + clipBounds.height
 
-        let cursorMinX = rect.origin.x
-        let cursorMaxX = rect.origin.x + max(rect.width, 2)
         let cursorMinY = rect.origin.y
         let cursorMaxY = rect.origin.y + rect.height
-
-        let maxScrollX: CGFloat = if let documentView = scrollView.documentView {
-            max(0, documentView.bounds.width - clipBounds.width)
-        } else {
-            0
-        }
 
         let maxScrollY: CGFloat = if let documentView = scrollView.documentView {
             max(0, documentView.bounds.height - clipBounds.height)
@@ -78,22 +68,13 @@ private final class CodeEditorTextView: NSTextView {
             0
         }
 
-        var newOrigin = clipBounds.origin
-
-        if cursorMaxX > visibleMaxX {
-            newOrigin.x = min(maxScrollX, max(0, cursorMaxX - clipBounds.width))
-        } else if cursorMinX < visibleMinX {
-            newOrigin.x = min(maxScrollX, max(0, cursorMinX))
-        }
-
         if cursorMaxY > visibleMaxY {
-            newOrigin.y = min(maxScrollY, max(0, cursorMaxY - clipBounds.height))
+            let newY = min(maxScrollY, max(0, cursorMaxY - clipBounds.height))
+            scrollView.contentView.setBoundsOrigin(NSPoint(x: clipBounds.origin.x, y: newY))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
         } else if cursorMinY < visibleMinY {
-            newOrigin.y = min(maxScrollY, max(0, cursorMinY))
-        }
-
-        if newOrigin != clipBounds.origin {
-            scrollView.contentView.setBoundsOrigin(newOrigin)
+            let newY = min(maxScrollY, max(0, cursorMinY))
+            scrollView.contentView.setBoundsOrigin(NSPoint(x: clipBounds.origin.x, y: newY))
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
     }
@@ -1368,35 +1349,18 @@ struct CodeEditorView: NSViewRepresentable {
                 actualCharacterRange: nil
             )
             var cursorRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-            cursorRect.origin.x += textView.textContainerOrigin.x + textView.frame.origin.x
             cursorRect.origin.y += textView.textContainerOrigin.y + textView.frame.origin.y
 
             let clipBounds = scrollView.contentView.bounds
-            let visibleMinX = clipBounds.origin.x
-            let visibleMaxX = visibleMinX + clipBounds.width
             let visibleMinY = clipBounds.origin.y
             let visibleMaxY = visibleMinY + clipBounds.height
 
-            let cursorMinX = cursorRect.origin.x
-            let cursorMaxX = cursorRect.origin.x + max(cursorRect.width, 2)
-            var newOrigin = clipBounds.origin
-
-            if cursorMaxX > visibleMaxX {
-                let maxScrollX = max(0, (containerView?.frame.width ?? textView.frame.width) - clipBounds.width)
-                newOrigin.x = min(maxScrollX, max(0, cursorMaxX - clipBounds.width))
-            } else if cursorMinX < visibleMinX {
-                let maxScrollX = max(0, (containerView?.frame.width ?? textView.frame.width) - clipBounds.width)
-                newOrigin.x = min(maxScrollX, max(0, cursorMinX))
-            }
-
             if cursorRect.maxY > visibleMaxY {
-                newOrigin.y = cursorRect.maxY - clipBounds.height
+                let newY = cursorRect.maxY - clipBounds.height
+                scrollView.contentView.setBoundsOrigin(NSPoint(x: clipBounds.origin.x, y: newY))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
             } else if cursorRect.origin.y < visibleMinY {
-                newOrigin.y = cursorRect.origin.y
-            }
-
-            if newOrigin != clipBounds.origin {
-                scrollView.contentView.setBoundsOrigin(newOrigin)
+                scrollView.contentView.setBoundsOrigin(NSPoint(x: clipBounds.origin.x, y: cursorRect.origin.y))
                 scrollView.reflectScrolledClipView(scrollView.contentView)
             }
         }

@@ -1,13 +1,38 @@
 import Foundation
+import CoreGraphics
 
 enum EditorSearchNavigationDirection {
     case next
     case previous
 }
 
+enum EditorMarkdownViewMode: String, CaseIterable {
+    case code
+    case preview
+    case split
+
+    var title: String {
+        switch self {
+        case .code: return "Code"
+        case .preview: return "Preview"
+        case .split: return "Split"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .code: return "curlybraces"
+        case .preview: return "doc.richtext"
+        case .split: return "rectangle.split.2x1"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class EditorTabState: Identifiable {
+    private static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd"]
+
     let id = UUID()
     let projectPath: String
     let filePath: String
@@ -39,6 +64,8 @@ final class EditorTabState: Identifiable {
     var awaitingLargeFileConfirmation = false
     var largeFileSize: Int64 = 0
     var backingStore: TextBackingStore?
+    var markdownViewMode: EditorMarkdownViewMode = .code
+    var markdownScrollPosition: CGFloat = 0
 
     static let largeFileWarningThreshold: Int64 = 5 * 1024 * 1024
     static let largeFileRefuseThreshold: Int64 = 50 * 1024 * 1024
@@ -60,6 +87,10 @@ final class EditorTabState: Identifiable {
     var displayTitle: String {
         let name = fileName
         return isModified ? "\(name) \u{2022}" : name
+    }
+
+    var isMarkdownFile: Bool {
+        Self.markdownExtensions.contains(fileExtension)
     }
 
     @ObservationIgnored private var loadTask: Task<Void, Never>?
@@ -84,6 +115,9 @@ final class EditorTabState: Identifiable {
     init(projectPath: String, filePath: String) {
         self.projectPath = projectPath
         self.filePath = filePath
+        if isMarkdownFile {
+            markdownViewMode = .preview
+        }
         loadFile()
     }
 

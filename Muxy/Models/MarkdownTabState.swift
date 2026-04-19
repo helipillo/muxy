@@ -359,8 +359,8 @@ enum MarkdownRenderer {
             pie12: "#\(mermaidTertiaryHex)"
         )
         let mermaidThemeVariablesJSON = mermaidThemeVariables.jsObjectLiteral
-        let fallbackPreparedContent = MermaidFallbackNormalizer.normalizeMermaidCodeBlocks(in: content)
-        let encodedPayload = Data(fallbackPreparedContent.utf8).base64EncodedString()
+        let preparedMermaidContent = MermaidCodeBlockNormalizer.normalizeMermaidCodeBlocks(in: content)
+        let encodedPayload = Data(preparedMermaidContent.utf8).base64EncodedString()
 
         let title = escapeForHTML(filePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Markdown")
         return """
@@ -788,7 +788,7 @@ enum MarkdownRenderer {
                         gfm: true,
                     });
 
-                    // Replace mermaid code blocks before marked parses them (fallback path)
+                    // Replace Mermaid code blocks before marked parses them
                     var diagramMap = {};
                     content = content.replace(/```mermaid\\s*\\r?\\n([\\s\\S]*?)```/g, function(match, code) {
                         var id = 'mermaid-' + Object.keys(diagramMap).length;
@@ -897,7 +897,7 @@ enum MarkdownRenderer {
     }
 }
 
-enum MermaidFallbackNormalizer {
+enum MermaidCodeBlockNormalizer {
     private static let mermaidFenceRegex = try? NSRegularExpression(
         pattern: "```mermaid\\s*\\n([\\s\\S]*?)```",
         options: []

@@ -233,7 +233,7 @@ struct MarkdownWebView: NSViewRepresentable {
                     "Markdown web update seq=\(self.loadCount) path=\(filePath ?? "<nil>", privacy: .public) htmlLength=\(html.utf8.count) pendingScrollY=\(scrollPosition)"
                 )
                 activeNavigation = webView.loadHTMLString(html, baseURL: nil)
-            } else if scrollPosition != lastScrollPosition && scrollPosition >= 0 {
+            } else if scrollPosition != lastScrollPosition, scrollPosition >= 0 {
                 lastScrollPosition = scrollPosition
                 if let scrollView = webView.safeScrollView {
                     var newBounds = scrollView.contentView.bounds

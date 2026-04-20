@@ -1,5 +1,5 @@
-import Foundation
 import AppKit
+import Foundation
 import os
 
 private let markdownLogger = Logger(subsystem: "app.muxy", category: "MarkdownPreview")
@@ -10,7 +10,7 @@ private enum MarkdownLoadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidUTF8:
-            return "File is not valid UTF-8 text."
+            "File is not valid UTF-8 text."
         }
     }
 }
@@ -134,17 +134,18 @@ final class MarkdownTabState {
             await MainActor.run {
                 guard let self,
                       self.loadRequestID == requestID,
-                      self.filePath == path else {
+                      self.filePath == path
+                else {
                     return
                 }
 
                 switch result {
-                case .success(let loaded):
+                case let .success(loaded):
                     self.rawContent = loaded.content
                     markdownLogger.info(
                         "Loaded markdown file path=\(path, privacy: .public) extension=\(ext, privacy: .public) bytes=\(loaded.bytes) status=success"
                     )
-                case .failure(let error, let loadedBytes):
+                case let .failure(error, loadedBytes):
                     self.rawContent = nil
                     self.errorMessage = error.localizedDescription
                     markdownLogger.error(

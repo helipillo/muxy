@@ -1,5 +1,5 @@
-import Foundation
 import CoreGraphics
+import Foundation
 
 enum EditorSearchNavigationDirection {
     case next
@@ -13,17 +13,17 @@ enum EditorMarkdownViewMode: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .code: return "Code"
-        case .preview: return "Preview"
-        case .split: return "Split"
+        case .code: "Code"
+        case .preview: "Preview"
+        case .split: "Split"
         }
     }
 
     var symbol: String {
         switch self {
-        case .code: return "curlybraces"
-        case .preview: return "doc.richtext"
-        case .split: return "rectangle.split.2x1"
+        case .code: "curlybraces"
+        case .preview: "doc.richtext"
+        case .split: "rectangle.split.2x1"
         }
     }
 }

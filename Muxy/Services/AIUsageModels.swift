@@ -1,6 +1,6 @@
 import Foundation
 
-struct AIUsageMetricRow: Identifiable, Equatable, Sendable {
+struct AIUsageMetricRow: Identifiable, Equatable {
     let id: String
     let label: String
     let percent: Double?
@@ -16,13 +16,13 @@ struct AIUsageMetricRow: Identifiable, Equatable, Sendable {
     }
 }
 
-enum AIProviderUsageState: Equatable, Sendable {
+enum AIProviderUsageState: Equatable {
     case available
     case unavailable(message: String)
     case error(message: String)
 }
 
-struct AIProviderUsageSnapshot: Identifiable, Equatable, Sendable {
+struct AIProviderUsageSnapshot: Identifiable, Equatable {
     let id: String
     let providerID: String
     let providerName: String

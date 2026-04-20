@@ -438,7 +438,8 @@ private struct AIProviderUsageView: View {
                         AIUsageMetricRowView(row: row)
                     }
                 }
-            case let .unavailable(message), let .error(message):
+            case let .unavailable(message),
+                 let .error(message):
                 Text(message)
                     .font(.system(size: 10))
                     .foregroundStyle(MuxyTheme.fgDim)

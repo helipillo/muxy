@@ -13,13 +13,13 @@ private func canonicalAIUsageProviderID(_ providerID: String) -> String {
     }
 }
 
-struct AIProviderUsageDescriptor: Sendable {
+struct AIProviderUsageDescriptor {
     let providerID: String
     let providerName: String
     let providerIconName: String
 }
 
-struct AITrackedProviderUsageDescriptor: Equatable, Sendable {
+struct AITrackedProviderUsageDescriptor: Equatable {
     let providerID: String
     let providerName: String
     let providerIconName: String
@@ -110,7 +110,7 @@ enum AIUsageSettingsStore {
     }
 }
 
-enum AIUsageAutoRefreshInterval: Int, CaseIterable, Identifiable, Sendable {
+enum AIUsageAutoRefreshInterval: Int, CaseIterable, Identifiable {
     case fiveMinutes = 300
     case fifteenMinutes = 900
     case thirtyMinutes = 1800
@@ -121,13 +121,13 @@ enum AIUsageAutoRefreshInterval: Int, CaseIterable, Identifiable, Sendable {
     var label: String {
         switch self {
         case .fiveMinutes:
-            return "5 min"
+            "5 min"
         case .fifteenMinutes:
-            return "15 min"
+            "15 min"
         case .thirtyMinutes:
-            return "30 min"
+            "30 min"
         case .oneHour:
-            return "1h"
+            "1h"
         }
     }
 
@@ -136,12 +136,12 @@ enum AIUsageAutoRefreshInterval: Int, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum AIUsageProviderCatalogSource: Sendable {
+enum AIUsageProviderCatalogSource {
     case native
     case openUsage
 }
 
-struct AIUsageProviderCatalogEntry: Identifiable, Equatable, Sendable {
+struct AIUsageProviderCatalogEntry: Identifiable, Equatable {
     let id: String
     let displayName: String
     let iconName: String
@@ -230,7 +230,8 @@ enum AIUsageSnapshotComposer {
         trackedProviders: [AITrackedProviderUsageDescriptor],
         fetchedSnapshots: [AIProviderUsageSnapshot]
     ) -> [AIProviderUsageSnapshot] {
-        let snapshotByProviderID = Dictionary(uniqueKeysWithValues: fetchedSnapshots.map { (canonicalAIUsageProviderID($0.providerID), $0) })
+        let snapshotByProviderID = Dictionary(uniqueKeysWithValues: fetchedSnapshots
+            .map { (canonicalAIUsageProviderID($0.providerID), $0) })
 
         return trackedProviders.map { provider in
             if !provider.isEnabled {
@@ -367,12 +368,10 @@ final class AIUsageService {
                 catalogByProviderID: catalogByProviderID
             )
 
-            let mergedSnapshots = AIUsageSnapshotMerger.merge(
-                nativeSnapshots: await nativeSnapshots,
-                openUsageSnapshots: await openUsageSnapshots
+            return await AIUsageSnapshotMerger.merge(
+                nativeSnapshots: nativeSnapshots,
+                openUsageSnapshots: openUsageSnapshots
             )
-
-            return mergedSnapshots
         }
 
         refreshTask = task
@@ -397,7 +396,6 @@ final class AIUsageService {
         let interval = AIUsageSettingsStore.autoRefreshInterval()
         return date.timeIntervalSince(lastRefreshDate) >= interval.timeInterval
     }
-
 
     func recomposeSnapshots() {
         let catalogProviders = AIUsageProviderCatalog.providers
@@ -445,7 +443,7 @@ enum AIUsageFetcher {
         await withTaskGroup(of: (Int, AIProviderUsageSnapshot).self) { group in
             for (index, provider) in providers.enumerated() {
                 group.addTask {
-                    (index, await fetchSnapshot(for: provider))
+                    await (index, fetchSnapshot(for: provider))
                 }
             }
 
@@ -458,16 +456,16 @@ enum AIUsageFetcher {
 
             return indexedSnapshots
                 .sorted { $0.0 < $1.0 }
-                .map { $0.1 }
+                .map(\.1)
         }
     }
 
     private static func fetchSnapshot(for provider: AIProviderUsageDescriptor) async -> AIProviderUsageSnapshot {
         switch provider.providerID {
         case "claude":
-            return await ClaudeUsageAPIClient.fetchSnapshot(for: provider)
+            await ClaudeUsageAPIClient.fetchSnapshot(for: provider)
         case "opencode":
-            return AIProviderUsageSnapshot(
+            AIProviderUsageSnapshot(
                 providerID: provider.providerID,
                 providerName: provider.providerName,
                 providerIconName: provider.providerIconName,
@@ -475,7 +473,7 @@ enum AIUsageFetcher {
                 rows: []
             )
         default:
-            return AIProviderUsageSnapshot(
+            AIProviderUsageSnapshot(
                 providerID: provider.providerID,
                 providerName: provider.providerName,
                 providerIconName: provider.providerIconName,
@@ -518,7 +516,11 @@ enum OpenUsageAPIClient {
         } catch {
             if let urlError = error as? URLError {
                 switch urlError.code {
-                case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet:
+                case .timedOut,
+                     .cannotFindHost,
+                     .cannotConnectToHost,
+                     .networkConnectionLost,
+                     .notConnectedToInternet:
                     usageLogger.info("OpenUsage bridge unavailable")
                 default:
                     usageLogger.info("OpenUsage bridge error: \(urlError.localizedDescription)")
@@ -580,22 +582,22 @@ enum OpenUsageAPIClient {
 
         let resetDate = extractDate(from: rawLine, keys: ["resetsAt", "resetAt", "resetDate"])
 
-        if lineType == "progress" || (extractDouble(from: rawLine, keys: ["used"]) != nil && extractDouble(from: rawLine, keys: ["limit"]) != nil) {
+        if lineType == "progress" ||
+            (extractDouble(from: rawLine, keys: ["used"]) != nil && extractDouble(from: rawLine, keys: ["limit"]) != nil)
+        {
             let used = extractDouble(from: rawLine, keys: ["used", "current", "value"])
             let limit = extractDouble(from: rawLine, keys: ["limit", "max", "total"])
 
-            let percent: Double?
-            if let used, let limit, limit > 0 {
-                percent = max(0, min(100, (used / limit) * 100))
+            let percent: Double? = if let used, let limit, limit > 0 {
+                max(0, min(100, (used / limit) * 100))
             } else {
-                percent = nil
+                nil
             }
 
-            let detail: String?
-            if let used, let limit {
-                detail = "\(formatUsageNumber(used))/\(formatUsageNumber(limit))"
+            let detail: String? = if let used, let limit {
+                "\(formatUsageNumber(used))/\(formatUsageNumber(limit))"
             } else {
-                detail = nil
+                nil
             }
 
             return AIUsageMetricRow(label: label, percent: percent, resetDate: resetDate, detail: detail)
@@ -672,7 +674,7 @@ enum OpenUsageAPIClient {
 
             if let number = value as? NSNumber {
                 let raw = number.doubleValue
-                let seconds = raw > 10_000_000_000 ? raw / 1_000 : raw
+                let seconds = raw > 10_000_000_000 ? raw / 1000 : raw
                 return Date(timeIntervalSince1970: seconds)
             }
         }
@@ -739,7 +741,7 @@ enum ClaudeUsageAPIClient {
                 state: .unavailable(message: "Sign in to Claude"),
                 rows: []
             )
-        } catch ClaudeUsageError.httpStatus(let statusCode) {
+        } catch let ClaudeUsageError.httpStatus(statusCode) {
             usageLogger.error("Claude usage request failed with status \(statusCode)")
             return AIProviderUsageSnapshot(
                 providerID: provider.providerID,

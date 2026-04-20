@@ -35,7 +35,7 @@ final class EditorTabState: Identifiable {
 
     let id = UUID()
     let projectPath: String
-    let filePath: String
+    private(set) var filePath: String
     var backingStoreVersion = 0
     var isLoading = false
     var isIncrementalLoading = false
@@ -119,6 +119,12 @@ final class EditorTabState: Identifiable {
             markdownViewMode = .preview
         }
         loadFile()
+    }
+
+    func updateFilePath(_ newPath: String) {
+        guard filePath != newPath else { return }
+        filePath = newPath
+        refreshReadOnlyStatus()
     }
 
     deinit {

@@ -127,7 +127,13 @@ struct EditorPane: View {
         MarkdownWebView(
             html: renderedMarkdownHTML,
             filePath: state.filePath,
-            scrollPosition: $state.markdownScrollPosition
+            scrollPosition: $state.markdownScrollPosition,
+            scrollSyncEnabled: state.markdownViewMode == .split && state.markdownScrollSyncEnabled,
+            onScrollProgressChanged: { progress in
+                guard state.markdownViewMode == .split, state.markdownScrollSyncEnabled else { return }
+                guard abs(state.markdownScrollPosition - progress) > 0.0005 else { return }
+                state.markdownScrollPosition = progress
+            }
         )
         .background(MuxyTheme.bg)
     }
@@ -233,6 +239,27 @@ private struct EditorMarkdownModePicker: View {
     }
 }
 
+private struct EditorMarkdownScrollSyncButton: View {
+    @Binding var isEnabled: Bool
+
+    var body: some View {
+        Button {
+            isEnabled.toggle()
+        } label: {
+            Image(systemName: isEnabled ? "link" : "link.slash")
+                .font(.system(size: 10, weight: .medium))
+                .frame(width: 22, height: 20)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(isEnabled ? MuxyTheme.surface : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(isEnabled ? "Disable Scroll Sync" : "Enable Scroll Sync")
+        .accessibilityLabel(isEnabled ? "Disable Markdown Scroll Sync" : "Enable Markdown Scroll Sync")
+    }
+}
+
 private struct EditorBreadcrumb: View {
     @Bindable var state: EditorTabState
 
@@ -268,8 +295,13 @@ private struct EditorBreadcrumb: View {
             }
             Spacer()
             if state.isMarkdownFile {
-                EditorMarkdownModePicker(mode: $state.markdownViewMode)
-                    .padding(.trailing, 6)
+                HStack(spacing: 4) {
+                    EditorMarkdownModePicker(mode: $state.markdownViewMode)
+                    if state.markdownViewMode == .split {
+                        EditorMarkdownScrollSyncButton(isEnabled: $state.markdownScrollSyncEnabled)
+                    }
+                }
+                .padding(.trailing, 6)
             }
             Text("Ln \(state.cursorLine), Col \(state.cursorColumn)")
                 .font(.system(size: 10, design: .monospaced))

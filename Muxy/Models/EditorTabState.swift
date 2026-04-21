@@ -66,6 +66,7 @@ final class EditorTabState: Identifiable {
     var backingStore: TextBackingStore?
     var markdownViewMode: EditorMarkdownViewMode = .code
     var markdownScrollPosition: CGFloat = 0
+    var markdownScrollSyncEnabled = true
 
     static let largeFileWarningThreshold: Int64 = 5 * 1024 * 1024
     static let largeFileRefuseThreshold: Int64 = 50 * 1024 * 1024

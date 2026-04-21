@@ -333,6 +333,8 @@ struct CodeEditorView: NSViewRepresentable {
         }
 
         updateSearchViewport(coordinator: coordinator)
+        coordinator.syncMarkdownScrollPositionIfNeeded()
+        coordinator.updateMarkdownPreviewScrollProgress()
 
         if coordinator.lastEditorFocusVersion != editorFocusVersion {
             coordinator.lastEditorFocusVersion = editorFocusVersion
@@ -493,6 +495,7 @@ struct CodeEditorView: NSViewRepresentable {
         private var lastRenderedViewportRange: Range<Int>?
         private var lastRenderedBackingStoreVersion = -1
         private var lastObservedClipSize: CGSize = .zero
+        private var isApplyingMarkdownScroll = false
         private var refreshTimingCount = 0
         private var highlightTimingCount = 0
         private var lastRefreshDurationMs: Double = 0
@@ -1013,6 +1016,7 @@ struct CodeEditorView: NSViewRepresentable {
                 name: NSView.boundsDidChangeNotification,
                 object: scrollView.contentView
             )
+            updateMarkdownPreviewScrollProgress()
         }
 
         private func removeScrollObserver() {
@@ -1034,9 +1038,58 @@ struct CodeEditorView: NSViewRepresentable {
                 }
                 lastObservedClipSize = boundsSize
             }
+            if isApplyingMarkdownScroll {
+                isApplyingMarkdownScroll = false
+            } else {
+                updateMarkdownPreviewScrollProgress()
+            }
             if !isEditingViewport {
                 refreshViewport(force: false)
             }
+        }
+
+        func syncMarkdownScrollPositionIfNeeded() {
+            guard state.isMarkdownFile,
+                  state.markdownViewMode == .split,
+                  state.markdownScrollSyncEnabled,
+                  let scrollView
+            else { return }
+
+            let clampedProgress = min(max(state.markdownScrollPosition, 0), 1)
+            let currentProgress = markdownScrollProgress(for: scrollView)
+            guard abs(currentProgress - clampedProgress) > 0.0005 else { return }
+
+            let visibleHeight = scrollView.contentView.bounds.height
+            let documentHeight = scrollView.documentView?.bounds.height ?? 0
+            let maxScrollY = max(0, documentHeight - visibleHeight)
+            let targetY = maxScrollY * clampedProgress
+
+            guard abs(scrollView.contentView.bounds.origin.y - targetY) > 0.5 else { return }
+
+            isApplyingMarkdownScroll = true
+            scrollView.contentView.setBoundsOrigin(NSPoint(x: scrollView.contentView.bounds.origin.x, y: targetY))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+
+        func updateMarkdownPreviewScrollProgress() {
+            guard state.isMarkdownFile,
+                  state.markdownViewMode == .split,
+                  state.markdownScrollSyncEnabled,
+                  let scrollView
+            else { return }
+
+            let progress = markdownScrollProgress(for: scrollView)
+
+            guard abs(state.markdownScrollPosition - progress) > 0.0005 else { return }
+            state.markdownScrollPosition = progress
+        }
+
+        private func markdownScrollProgress(for scrollView: NSScrollView) -> CGFloat {
+            let visibleHeight = scrollView.contentView.bounds.height
+            let documentHeight = scrollView.documentView?.bounds.height ?? 0
+            let maxScrollY = max(0, documentHeight - visibleHeight)
+            let scrollY = min(max(0, scrollView.contentView.bounds.origin.y), maxScrollY)
+            return maxScrollY > 0 ? scrollY / maxScrollY : 0
         }
 
         // MARK: - NSTextViewDelegate

@@ -319,6 +319,10 @@ struct CodeEditorView: NSViewRepresentable {
 
         if fontChanged {
             viewport.updateEstimatedLineHeight(font: font)
+            viewport.updateDocumentPadding(
+                topInset: textView.textContainerInset.height,
+                bottomInset: textView.textContainerInset.height
+            )
             coordinator.updateContainerHeight()
             coordinator.refreshViewport(force: true)
         }
@@ -590,6 +594,11 @@ struct CodeEditorView: NSViewRepresentable {
             let height = viewport.totalDocumentHeight
             let width = max(scrollView.contentSize.width, textView?.frame.width ?? scrollView.contentSize.width)
             container.frame = NSRect(x: 0, y: 0, width: width, height: height)
+            let maxScrollY = max(0, height - scrollView.contentView.bounds.height)
+            if scrollView.contentView.bounds.origin.y > maxScrollY {
+                scrollView.contentView.setBoundsOrigin(NSPoint(x: scrollView.contentView.bounds.origin.x, y: maxScrollY))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
         }
 
         func refreshViewport(force: Bool) {
@@ -961,11 +970,19 @@ struct CodeEditorView: NSViewRepresentable {
             let estimatedHeight = viewport.estimatedLineHeight * CGFloat(max(1, visibleLineCount))
                 + textView.textContainerInset.height * 2
             let viewportWidth = viewportContentWidth(for: textView, scrollView: scrollView)
+            if let layoutManager = textView.layoutManager, let textContainer = textView.textContainer {
+                layoutManager.ensureLayout(for: textContainer)
+            }
+            let laidOutHeight: CGFloat = if let layoutManager = textView.layoutManager, let textContainer = textView.textContainer {
+                ceil(layoutManager.usedRect(for: textContainer).height + textView.textContainerInset.height * 2)
+            } else {
+                estimatedHeight
+            }
             let newTextFrame = NSRect(
                 x: 0,
                 y: yOffset,
                 width: viewportWidth,
-                height: max(estimatedHeight, 100)
+                height: max(estimatedHeight, laidOutHeight, 100)
             )
             if textView.frame != newTextFrame {
                 textView.frame = newTextFrame

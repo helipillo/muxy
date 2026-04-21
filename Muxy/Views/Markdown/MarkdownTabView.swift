@@ -25,17 +25,12 @@ private enum MarkdownWebBridge {
         const handler = window.webkit?.messageHandlers?.muxyMarkdownScroll;
         if (!handler) return;
 
+        const scrollRoot = () => document.scrollingElement || document.documentElement || document.body;
         const report = () => {
-            const doc = document.documentElement;
-            const body = document.body;
-            const scrollHeight = Math.max(
-                doc?.scrollHeight ?? 0,
-                body?.scrollHeight ?? 0,
-                doc?.offsetHeight ?? 0,
-                body?.offsetHeight ?? 0
-            );
-            const maxScrollY = Math.max(0, scrollHeight - window.innerHeight);
-            const progress = maxScrollY > 0 ? window.scrollY / maxScrollY : 0;
+            const root = scrollRoot();
+            if (!root) return;
+            const maxScrollY = Math.max(0, root.scrollHeight - root.clientHeight);
+            const progress = maxScrollY > 0 ? root.scrollTop / maxScrollY : 0;
             handler.postMessage(progress);
         };
 
@@ -46,6 +41,18 @@ private enum MarkdownWebBridge {
         setTimeout(report, 0);
     })();
     """#
+
+    static func scrollToProgressScript(_ progress: CGFloat) -> String {
+        let clamped = min(max(progress, 0), 1)
+        return """
+        (() => {
+            const root = document.scrollingElement || document.documentElement || document.body;
+            if (!root) return;
+            const maxScrollY = Math.max(0, root.scrollHeight - root.clientHeight);
+            root.scrollTop = maxScrollY * \(clamped);
+        })();
+        """
+    }
 }
 
 struct MarkdownTabView: View {
@@ -396,27 +403,24 @@ struct MarkdownWebView: NSViewRepresentable {
         }
 
         func applyScrollProgress(_ progress: CGFloat, to webView: WKWebView) {
-            guard progress >= 0, let scrollView = webView.safeScrollView else { return }
-
-            webView.layoutSubtreeIfNeeded()
-            scrollView.documentView?.layoutSubtreeIfNeeded()
+            guard progress >= 0 else { return }
 
             let clampedProgress = min(max(progress, 0), 1)
-            let visibleHeight = scrollView.contentView.bounds.height
-            let documentHeight = scrollView.documentView?.bounds.height ?? 0
-            let maxScrollY = max(0, documentHeight - visibleHeight)
-            let targetY = maxScrollY * clampedProgress
-
-            guard abs(scrollView.contentView.bounds.origin.y - targetY) > 0.5 else {
-                lastScrollProgress = clampedProgress
-                return
-            }
+            guard abs(lastScrollProgress - clampedProgress) > 0.0005 else { return }
 
             isApplyingProgrammaticScroll = true
-            scrollView.contentView.setBoundsOrigin(NSPoint(x: scrollView.contentView.bounds.origin.x, y: targetY))
-            scrollView.reflectScrolledClipView(scrollView.contentView)
-            lastScrollProgress = clampedProgress
-            lastReportedScrollProgress = clampedProgress
+            let script = MarkdownWebBridge.scrollToProgressScript(clampedProgress)
+            webView.evaluateJavaScript(script) { _, error in
+                if let error {
+                    self.isApplyingProgrammaticScroll = false
+                    markdownWebLogger.error(
+                        "Failed applying markdown scroll progress: \(error.localizedDescription, privacy: .public)"
+                    )
+                    return
+                }
+
+                self.lastScrollProgress = clampedProgress
+            }
         }
 
         private func logNavigationFailure(kind: String, navigation: WKNavigation!, error: Error) {

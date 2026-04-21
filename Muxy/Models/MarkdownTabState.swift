@@ -407,7 +407,7 @@ enum MarkdownRenderer {
                 #content {
                     height: 100%;
                     overflow-y: auto;
-                    padding: 24px 32px 60px 32px;
+                    padding: 24px 32px max(60px, 40vh) 32px;
                     box-sizing: border-box;
                 }
                 .markdown-body {

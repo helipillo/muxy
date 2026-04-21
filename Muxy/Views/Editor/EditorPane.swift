@@ -124,17 +124,30 @@ struct EditorPane: View {
     }
 
     private var markdownPreviewContainer: some View {
-        MarkdownWebView(
-            html: renderedMarkdownHTML,
-            filePath: state.filePath,
-            scrollPosition: $state.markdownScrollPosition,
-            scrollSyncEnabled: state.markdownViewMode == .split && state.markdownScrollSyncEnabled,
-            onScrollProgressChanged: { progress in
-                guard state.markdownViewMode == .split, state.markdownScrollSyncEnabled else { return }
-                guard abs(state.markdownScrollPosition - progress) > 0.0005 else { return }
-                state.markdownScrollPosition = progress
+        ZStack(alignment: .topTrailing) {
+            MarkdownWebView(
+                html: renderedMarkdownHTML,
+                filePath: state.filePath,
+                scrollPosition: $state.markdownScrollPosition,
+                scrollSyncEnabled: state.markdownViewMode == .split && state.markdownScrollSyncEnabled,
+                onScrollProgressChanged: { progress in
+                    guard state.markdownViewMode == .split, state.markdownScrollSyncEnabled else { return }
+                    guard abs(state.markdownScrollPosition - progress) > 0.0005 else { return }
+                    state.markdownScrollPosition = progress
+                }
+            )
+
+            if state.isMarkdownFile, state.markdownViewMode == .split {
+                EditorMarkdownScrollSyncButton(isEnabled: $state.markdownScrollSyncEnabled)
+                    .padding(8)
+                    .background(MuxyTheme.bg.opacity(0.92), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(MuxyTheme.border, lineWidth: 1)
+                    )
+                    .padding(8)
             }
-        )
+        }
         .background(MuxyTheme.bg)
     }
 
@@ -295,13 +308,8 @@ private struct EditorBreadcrumb: View {
             }
             Spacer()
             if state.isMarkdownFile {
-                HStack(spacing: 4) {
-                    EditorMarkdownModePicker(mode: $state.markdownViewMode)
-                    if state.markdownViewMode == .split {
-                        EditorMarkdownScrollSyncButton(isEnabled: $state.markdownScrollSyncEnabled)
-                    }
-                }
-                .padding(.trailing, 6)
+                EditorMarkdownModePicker(mode: $state.markdownViewMode)
+                    .padding(.trailing, 6)
             }
             Text("Ln \(state.cursorLine), Col \(state.cursorColumn)")
                 .font(.system(size: 10, design: .monospaced))

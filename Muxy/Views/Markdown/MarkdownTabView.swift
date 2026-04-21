@@ -17,6 +17,37 @@ extension WKWebView {
     }
 }
 
+private enum MarkdownWebBridge {
+    static let scrollHandlerName = "muxyMarkdownScroll"
+
+    static let scrollObserverScript = #"""
+    (() => {
+        const handler = window.webkit?.messageHandlers?.muxyMarkdownScroll;
+        if (!handler) return;
+
+        const report = () => {
+            const doc = document.documentElement;
+            const body = document.body;
+            const scrollHeight = Math.max(
+                doc?.scrollHeight ?? 0,
+                body?.scrollHeight ?? 0,
+                doc?.offsetHeight ?? 0,
+                body?.offsetHeight ?? 0
+            );
+            const maxScrollY = Math.max(0, scrollHeight - window.innerHeight);
+            const progress = maxScrollY > 0 ? window.scrollY / maxScrollY : 0;
+            handler.postMessage(progress);
+        };
+
+        window.addEventListener('scroll', report, { passive: true });
+        window.addEventListener('resize', report, { passive: true });
+        window.addEventListener('load', () => setTimeout(report, 0));
+        document.addEventListener('DOMContentLoaded', () => setTimeout(report, 0));
+        setTimeout(report, 0);
+    })();
+    """#
+}
+
 struct MarkdownTabView: View {
     @Bindable var state: MarkdownTabState
     let onFocus: () -> Void
@@ -190,6 +221,7 @@ struct MarkdownWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        context.coordinator.installBridge(into: config)
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
@@ -197,7 +229,6 @@ struct MarkdownWebView: NSViewRepresentable {
             scrollSyncEnabled: scrollSyncEnabled,
             onScrollProgressChanged: onScrollProgressChanged
         )
-        context.coordinator.setScrollObserver(for: webView)
         if scrollSyncEnabled {
             context.coordinator.applyScrollProgress(scrollPosition, to: webView)
         }
@@ -211,7 +242,6 @@ struct MarkdownWebView: NSViewRepresentable {
             scrollSyncEnabled: scrollSyncEnabled,
             onScrollProgressChanged: onScrollProgressChanged
         )
-        context.coordinator.setScrollObserver(for: webView)
         context.coordinator.updateHTML(
             html,
             scrollPosition: scrollPosition,
@@ -223,10 +253,11 @@ struct MarkdownWebView: NSViewRepresentable {
 
     static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
         webView.navigationDelegate = nil
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: MarkdownWebBridge.scrollHandlerName)
         coordinator.removeScrollObserver()
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         private var lastHTML: String = ""
         private var lastScrollProgress: CGFloat = -1
         private var lastReportedScrollProgress: CGFloat = -1
@@ -234,7 +265,6 @@ struct MarkdownWebView: NSViewRepresentable {
         private var activeNavigation: WKNavigation?
         private var loadCount: Int = 0
         private var currentFilePath: String?
-        private weak var observedContentView: NSClipView?
         private var scrollSyncEnabled = true
         private var lastConfiguredScrollSyncEnabled = true
         private var onScrollProgressChanged: ((CGFloat) -> Void)?
@@ -246,28 +276,21 @@ struct MarkdownWebView: NSViewRepresentable {
             self.onScrollProgressChanged = onScrollProgressChanged
         }
 
-        func setScrollObserver(for webView: WKWebView) {
-            guard let scrollView = webView.safeScrollView else { return }
-            guard observedContentView !== scrollView.contentView else { return }
-
-            removeScrollObserver()
-            scrollView.contentView.postsBoundsChangedNotifications = true
-            observedContentView = scrollView.contentView
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(handlePreviewScrollBoundsChange),
-                name: NSView.boundsDidChangeNotification,
-                object: scrollView.contentView
+        func installBridge(into configuration: WKWebViewConfiguration) {
+            configuration.userContentController.removeScriptMessageHandler(forName: MarkdownWebBridge.scrollHandlerName)
+            configuration.userContentController.removeAllUserScripts()
+            configuration.userContentController.add(self, name: MarkdownWebBridge.scrollHandlerName)
+            configuration.userContentController.addUserScript(
+                WKUserScript(
+                    source: MarkdownWebBridge.scrollObserverScript,
+                    injectionTime: .atDocumentEnd,
+                    forMainFrameOnly: true
+                )
             )
         }
 
         func removeScrollObserver() {
-            NotificationCenter.default.removeObserver(
-                self,
-                name: NSView.boundsDidChangeNotification,
-                object: observedContentView
-            )
-            observedContentView = nil
+            isApplyingProgrammaticScroll = false
         }
 
         func loadHTML(_ html: String, filePath: String?, into webView: WKWebView) {
@@ -300,18 +323,8 @@ struct MarkdownWebView: NSViewRepresentable {
                     "Markdown web update seq=\(self.loadCount) path=\(filePath ?? "<nil>", privacy: .public) htmlLength=\(html.utf8.count) pendingScrollProgress=\(scrollPosition)"
                 )
                 activeNavigation = webView.loadHTMLString(html, baseURL: nil)
-<<<<<<< HEAD
-            } else if scrollPosition != lastScrollPosition, scrollPosition >= 0 {
-                lastScrollPosition = scrollPosition
-                if let scrollView = webView.safeScrollView {
-                    var newBounds = scrollView.contentView.bounds
-                    newBounds.origin.y = scrollPosition
-                    scrollView.contentView.bounds = newBounds
-                }
-=======
             } else if scrollSyncEnabled, (syncWasJustEnabled || scrollPosition != lastScrollProgress), scrollPosition >= 0 {
                 applyScrollProgress(scrollPosition, to: webView)
->>>>>>> b9b5814 (Add markdown split scroll sync toggle)
             }
         }
 
@@ -361,25 +374,25 @@ struct MarkdownWebView: NSViewRepresentable {
             )
         }
 
-        @objc
-        private func handlePreviewScrollBoundsChange() {
-            guard scrollSyncEnabled, !isNavigationInFlight, let observedContentView else { return }
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == MarkdownWebBridge.scrollHandlerName,
+                  scrollSyncEnabled,
+                  !isNavigationInFlight,
+                  let progress = message.body as? Double
+            else { return }
 
-            if isApplyingProgrammaticScroll {
+            let clampedProgress = min(max(CGFloat(progress), 0), 1)
+
+            if isApplyingProgrammaticScroll, abs(clampedProgress - lastScrollProgress) <= 0.0005 {
                 isApplyingProgrammaticScroll = false
+                lastReportedScrollProgress = clampedProgress
                 return
             }
 
-            let visibleHeight = observedContentView.bounds.height
-            let documentHeight = observedContentView.documentView?.bounds.height ?? 0
-            let maxScrollY = max(0, documentHeight - visibleHeight)
-            let scrollY = min(max(0, observedContentView.bounds.origin.y), maxScrollY)
-            let progress = maxScrollY > 0 ? scrollY / maxScrollY : 0
-
-            guard abs(lastReportedScrollProgress - progress) > 0.0005 else { return }
-            lastReportedScrollProgress = progress
-            lastScrollProgress = progress
-            onScrollProgressChanged?(progress)
+            guard abs(lastReportedScrollProgress - clampedProgress) > 0.0005 else { return }
+            lastReportedScrollProgress = clampedProgress
+            lastScrollProgress = clampedProgress
+            onScrollProgressChanged?(clampedProgress)
         }
 
         func applyScrollProgress(_ progress: CGFloat, to webView: WKWebView) {

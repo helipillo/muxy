@@ -133,6 +133,17 @@ struct EditorPane: View {
                 guard state.markdownViewMode == .split, state.markdownScrollSyncEnabled else { return }
                 guard abs(state.markdownScrollPosition - progress) > 0.0005 else { return }
                 state.markdownScrollPosition = progress
+            },
+            onLinkedScrollWheel: { deltaY in
+                guard state.markdownViewMode == .split, state.markdownScrollSyncEnabled else { return }
+                NotificationCenter.default.post(
+                    name: .markdownPreviewScrollWheel,
+                    object: nil,
+                    userInfo: [
+                        "tabID": state.id.uuidString,
+                        "deltaY": deltaY,
+                    ]
+                )
             }
         )
         .background(MuxyTheme.bg)
@@ -255,7 +266,7 @@ private struct EditorMarkdownScrollSyncButton: View {
         Button {
             isEnabled.toggle()
         } label: {
-            Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
+            Image(systemName: "arrow.up.and.down")
                 .symbolRenderingMode(.monochrome)
                 .foregroundStyle(isEnabled ? MuxyTheme.accent : MuxyTheme.fgMuted)
                 .font(.system(size: 10, weight: .semibold))

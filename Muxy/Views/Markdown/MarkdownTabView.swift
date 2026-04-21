@@ -17,6 +17,20 @@ extension WKWebView {
     }
 }
 
+final class LinkedMarkdownWebView: WKWebView {
+    var scrollSyncEnabled = false
+    var onLinkedScrollWheel: ((CGFloat) -> Void)?
+
+    override func scrollWheel(with event: NSEvent) {
+        guard scrollSyncEnabled, let onLinkedScrollWheel else {
+            super.scrollWheel(with: event)
+            return
+        }
+
+        onLinkedScrollWheel(CGFloat(event.scrollingDeltaY))
+    }
+}
+
 private enum MarkdownWebBridge {
     static let scrollHandlerName = "muxyMarkdownScroll"
 
@@ -227,17 +241,20 @@ struct MarkdownWebView: NSViewRepresentable {
     @Binding var scrollPosition: CGFloat
     var scrollSyncEnabled = true
     var onScrollProgressChanged: ((CGFloat) -> Void)? = nil
+    var onLinkedScrollWheel: ((CGFloat) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
-    func makeNSView(context: Context) -> WKWebView {
+    func makeNSView(context: Context) -> LinkedMarkdownWebView {
         let config = WKWebViewConfiguration()
         context.coordinator.installBridge(into: config)
 
-        let webView = WKWebView(frame: .zero, configuration: config)
+        let webView = LinkedMarkdownWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
+        webView.scrollSyncEnabled = scrollSyncEnabled
+        webView.onLinkedScrollWheel = onLinkedScrollWheel
         context.coordinator.configure(
             scrollSyncEnabled: scrollSyncEnabled,
             onScrollProgressChanged: onScrollProgressChanged
@@ -250,7 +267,9 @@ struct MarkdownWebView: NSViewRepresentable {
         return webView
     }
 
-    func updateNSView(_ webView: WKWebView, context: Context) {
+    func updateNSView(_ webView: LinkedMarkdownWebView, context: Context) {
+        webView.scrollSyncEnabled = scrollSyncEnabled
+        webView.onLinkedScrollWheel = onLinkedScrollWheel
         context.coordinator.configure(
             scrollSyncEnabled: scrollSyncEnabled,
             onScrollProgressChanged: onScrollProgressChanged
@@ -264,8 +283,9 @@ struct MarkdownWebView: NSViewRepresentable {
         )
     }
 
-    static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
+    static func dismantleNSView(_ webView: LinkedMarkdownWebView, coordinator: Coordinator) {
         webView.navigationDelegate = nil
+        webView.onLinkedScrollWheel = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: MarkdownWebBridge.scrollHandlerName)
         coordinator.removeScrollObserver()
     }

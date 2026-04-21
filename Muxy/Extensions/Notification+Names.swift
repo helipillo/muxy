@@ -15,4 +15,5 @@ extension Notification.Name {
     static let toggleSidebar = Notification.Name("MuxyToggleSidebar")
     static let toggleNotificationPanel = Notification.Name("MuxyToggleNotificationPanel")
     static let vcsRepoDidChange = Notification.Name("MuxyVCSRepoDidChange")
+    static let markdownPreviewScrollWheel = Notification.Name("MuxyMarkdownPreviewScrollWheel")
 }

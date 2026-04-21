@@ -25,7 +25,7 @@ private enum MarkdownWebBridge {
         const handler = window.webkit?.messageHandlers?.muxyMarkdownScroll;
         if (!handler) return;
 
-        const scrollRoot = () => document.scrollingElement || document.documentElement || document.body;
+        const scrollRoot = () => document.getElementById('content') || document.scrollingElement || document.documentElement || document.body;
         const report = () => {
             const root = scrollRoot();
             if (!root) return;
@@ -34,11 +34,17 @@ private enum MarkdownWebBridge {
             handler.postMessage(progress);
         };
 
-        window.addEventListener('scroll', report, { passive: true });
+        const attach = () => {
+            const root = scrollRoot();
+            if (!root) return;
+            root.addEventListener('scroll', report, { passive: true });
+            report();
+        };
+
         window.addEventListener('resize', report, { passive: true });
-        window.addEventListener('load', () => setTimeout(report, 0));
-        document.addEventListener('DOMContentLoaded', () => setTimeout(report, 0));
-        setTimeout(report, 0);
+        window.addEventListener('load', () => setTimeout(attach, 0));
+        document.addEventListener('DOMContentLoaded', () => setTimeout(attach, 0));
+        setTimeout(attach, 0);
     })();
     """#
 
@@ -46,7 +52,7 @@ private enum MarkdownWebBridge {
         let clamped = min(max(progress, 0), 1)
         return """
         (() => {
-            const root = document.scrollingElement || document.documentElement || document.body;
+            const root = document.getElementById('content') || document.scrollingElement || document.documentElement || document.body;
             if (!root) return;
             const maxScrollY = Math.max(0, root.scrollHeight - root.clientHeight);
             root.scrollTop = maxScrollY * \(clamped);

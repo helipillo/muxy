@@ -252,18 +252,16 @@ private struct EditorMarkdownScrollSyncButton: View {
     @Binding var isEnabled: Bool
 
     var body: some View {
-        Button {
-            isEnabled.toggle()
-        } label: {
-            Image(systemName: isEnabled ? "link" : "link.slash")
+        Toggle(isOn: $isEnabled) {
+            Image(systemName: isEnabled ? "link" : "link.badge.minus")
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(MuxyTheme.fg)
                 .font(.system(size: 10, weight: .medium))
-                .frame(width: 22, height: 20)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(isEnabled ? MuxyTheme.surface : Color.clear)
-                )
+                .frame(width: 28, height: 20)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .toggleStyle(.button)
+        .buttonStyle(.borderless)
         .help(isEnabled ? "Disable Scroll Sync" : "Enable Scroll Sync")
         .accessibilityLabel(isEnabled ? "Disable Markdown Scroll Sync" : "Enable Markdown Scroll Sync")
     }

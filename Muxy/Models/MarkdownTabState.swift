@@ -410,6 +410,19 @@ enum MarkdownRenderer {
                     padding: 24px 32px max(60px, 40vh) 32px;
                     box-sizing: border-box;
                 }
+                html.muxy-hide-content-scrollbar #content {
+                    scrollbar-width: none;
+                    -ms-overflow-style: none;
+                }
+                html.muxy-hide-content-scrollbar #content::-webkit-scrollbar {
+                    width: 0;
+                    height: 0;
+                    display: none;
+                }
+                html.muxy-linked-scroll #content {
+                    overflow-y: hidden;
+                    overscroll-behavior: none;
+                }
                 .markdown-body {
                     max-width: 900px;
                     margin: 0 auto;

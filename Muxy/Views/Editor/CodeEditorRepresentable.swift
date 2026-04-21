@@ -224,6 +224,7 @@ struct CodeEditorView: NSViewRepresentable {
         textView.delegate = coordinator
         coordinator.textView = textView
         coordinator.scrollView = scrollView
+        state.registerLinkedMarkdownEditorScrollView(scrollView)
         textView.onUndoRequest = { [weak coordinator] in
             coordinator?.performUndoRequest() ?? false
         }
@@ -243,6 +244,7 @@ struct CodeEditorView: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        coordinator.state.unregisterLinkedMarkdownEditorScrollView(scrollView)
         if let textView = coordinator.textView {
             textView.undoManager?.removeAllActions()
             if let window = textView.window, window.firstResponder === textView {

@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 
@@ -74,6 +75,8 @@ final class EditorTabState: Identifiable {
     var markdownScrollSyncEnabled = true
     var markdownScrollDriver: EditorMarkdownScrollDriver = .editor
 
+    @ObservationIgnored private weak var linkedMarkdownEditorScrollView: NSScrollView?
+
     static let largeFileWarningThreshold: Int64 = 5 * 1024 * 1024
     static let largeFileRefuseThreshold: Int64 = 50 * 1024 * 1024
     static let initialOpenChunkSize = 512 * 1024
@@ -132,6 +135,31 @@ final class EditorTabState: Identifiable {
         guard filePath != newPath else { return }
         filePath = newPath
         refreshReadOnlyStatus()
+    }
+
+    func registerLinkedMarkdownEditorScrollView(_ scrollView: NSScrollView) {
+        linkedMarkdownEditorScrollView = scrollView
+    }
+
+    func unregisterLinkedMarkdownEditorScrollView(_ scrollView: NSScrollView) {
+        guard linkedMarkdownEditorScrollView === scrollView else { return }
+        linkedMarkdownEditorScrollView = nil
+    }
+
+    func forwardLinkedMarkdownScroll(deltaY: CGFloat) {
+        guard let scrollView = linkedMarkdownEditorScrollView else { return }
+
+        let visibleHeight = scrollView.contentView.bounds.height
+        let documentHeight = scrollView.documentView?.bounds.height ?? 0
+        let maxScrollY = max(0, documentHeight - visibleHeight)
+        let currentY = scrollView.contentView.bounds.origin.y
+        let targetY = min(maxScrollY, max(0, currentY + deltaY))
+
+        guard abs(targetY - currentY) > 0.1 else { return }
+
+        markdownScrollDriver = .editor
+        scrollView.contentView.setBoundsOrigin(NSPoint(x: scrollView.contentView.bounds.origin.x, y: targetY))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     deinit {

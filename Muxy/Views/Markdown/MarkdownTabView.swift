@@ -19,10 +19,12 @@ extension WKWebView {
 
 private enum MarkdownWebBridge {
     static let scrollHandlerName = "muxyMarkdownScroll"
+    static let wheelHandlerName = "muxyMarkdownWheel"
 
     static let scrollObserverScript = #"""
     (() => {
         const handler = window.webkit?.messageHandlers?.muxyMarkdownScroll;
+        const wheelHandler = window.webkit?.messageHandlers?.muxyMarkdownWheel;
         if (!handler) return;
 
         const scrollRoot = () => document.getElementById('content') || document.scrollingElement || document.documentElement || document.body;
@@ -38,6 +40,12 @@ private enum MarkdownWebBridge {
             const root = scrollRoot();
             if (!root) return;
             root.addEventListener('scroll', report, { passive: true });
+            root.addEventListener('wheel', event => {
+                if (!wheelHandler) return;
+                if (!document.documentElement?.classList.contains('muxy-linked-scroll')) return;
+                wheelHandler.postMessage({ deltaY: event.deltaY });
+                event.preventDefault();
+            }, { passive: false });
             report();
         };
 
@@ -227,7 +235,10 @@ struct MarkdownWebView: NSViewRepresentable {
     @Binding var scrollPosition: CGFloat
     var scrollSyncEnabled = true
     var showsVerticalScroller = true
+    var hidesContentScrollbar = false
+    var linkedScrollEnabled = false
     var onScrollProgressChanged: ((CGFloat) -> Void)?
+    var onLinkedScrollWheel: ((CGFloat) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -242,7 +253,10 @@ struct MarkdownWebView: NSViewRepresentable {
         context.coordinator.configure(
             scrollSyncEnabled: scrollSyncEnabled,
             showsVerticalScroller: showsVerticalScroller,
-            onScrollProgressChanged: onScrollProgressChanged
+            hidesContentScrollbar: hidesContentScrollbar,
+            linkedScrollEnabled: linkedScrollEnabled,
+            onScrollProgressChanged: onScrollProgressChanged,
+            onLinkedScrollWheel: onLinkedScrollWheel
         )
         context.coordinator.updateScrollerVisibility(in: webView)
         if scrollSyncEnabled {
@@ -257,9 +271,13 @@ struct MarkdownWebView: NSViewRepresentable {
         context.coordinator.configure(
             scrollSyncEnabled: scrollSyncEnabled,
             showsVerticalScroller: showsVerticalScroller,
-            onScrollProgressChanged: onScrollProgressChanged
+            hidesContentScrollbar: hidesContentScrollbar,
+            linkedScrollEnabled: linkedScrollEnabled,
+            onScrollProgressChanged: onScrollProgressChanged,
+            onLinkedScrollWheel: onLinkedScrollWheel
         )
         context.coordinator.updateScrollerVisibility(in: webView)
+        context.coordinator.updateContentScrollbarVisibility(in: webView)
         context.coordinator.updateHTML(
             html,
             scrollPosition: scrollPosition,
@@ -272,6 +290,7 @@ struct MarkdownWebView: NSViewRepresentable {
     static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
         webView.navigationDelegate = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: MarkdownWebBridge.scrollHandlerName)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: MarkdownWebBridge.wheelHandlerName)
         coordinator.removeScrollObserver()
     }
 
@@ -288,7 +307,10 @@ struct MarkdownWebView: NSViewRepresentable {
         private var scrollSyncEnabled = true
         private var lastConfiguredScrollSyncEnabled = true
         private var showsVerticalScroller = true
+        private var hidesContentScrollbar = false
+        private var linkedScrollEnabled = false
         private var onScrollProgressChanged: ((CGFloat) -> Void)?
+        private var onLinkedScrollWheel: ((CGFloat) -> Void)?
         private var isApplyingProgrammaticScroll = false
         private var isNavigationInFlight = false
         private var programmaticScrollSuppressionUntil: Date?
@@ -296,11 +318,17 @@ struct MarkdownWebView: NSViewRepresentable {
         func configure(
             scrollSyncEnabled: Bool,
             showsVerticalScroller: Bool,
-            onScrollProgressChanged: ((CGFloat) -> Void)?
+            hidesContentScrollbar: Bool,
+            linkedScrollEnabled: Bool,
+            onScrollProgressChanged: ((CGFloat) -> Void)?,
+            onLinkedScrollWheel: ((CGFloat) -> Void)?
         ) {
             self.scrollSyncEnabled = scrollSyncEnabled
             self.showsVerticalScroller = showsVerticalScroller
+            self.hidesContentScrollbar = hidesContentScrollbar
+            self.linkedScrollEnabled = linkedScrollEnabled
             self.onScrollProgressChanged = onScrollProgressChanged
+            self.onLinkedScrollWheel = onLinkedScrollWheel
         }
 
         func updateScrollerVisibility(in webView: WKWebView) {
@@ -313,10 +341,35 @@ struct MarkdownWebView: NSViewRepresentable {
             }
         }
 
+        func updateContentScrollbarVisibility(in webView: WKWebView) {
+            let hideScrollbar = hidesContentScrollbar ? "true" : "false"
+            let script = """
+            (() => {
+                const root = document.documentElement;
+                if (!root) return;
+                root.classList.toggle('muxy-hide-content-scrollbar', \(
+                    hideScrollbar
+                ));
+                root.classList.toggle('muxy-linked-scroll', \(
+                    linkedScrollEnabled ? "true" : "false"
+                ));
+            })();
+            """
+            webView.evaluateJavaScript(script) { _, error in
+                if let error {
+                    markdownWebLogger.error(
+                        "Failed updating markdown content scrollbar visibility: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+            }
+        }
+
         func installBridge(into configuration: WKWebViewConfiguration) {
             configuration.userContentController.removeScriptMessageHandler(forName: MarkdownWebBridge.scrollHandlerName)
+            configuration.userContentController.removeScriptMessageHandler(forName: MarkdownWebBridge.wheelHandlerName)
             configuration.userContentController.removeAllUserScripts()
             configuration.userContentController.add(self, name: MarkdownWebBridge.scrollHandlerName)
+            configuration.userContentController.add(self, name: MarkdownWebBridge.wheelHandlerName)
             configuration.userContentController.addUserScript(
                 WKUserScript(
                     source: MarkdownWebBridge.scrollObserverScript,
@@ -386,6 +439,7 @@ struct MarkdownWebView: NSViewRepresentable {
                 pendingScrollProgress = nil
                 applyScrollProgress(pending, to: webView)
             }
+            updateContentScrollbarVisibility(in: webView)
             collectJavaScriptErrors(from: webView)
         }
 
@@ -413,6 +467,15 @@ struct MarkdownWebView: NSViewRepresentable {
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == MarkdownWebBridge.wheelHandlerName {
+                guard linkedScrollEnabled,
+                      let payload = message.body as? [String: Any],
+                      let deltaY = payload["deltaY"] as? Double
+                else { return }
+                onLinkedScrollWheel?(CGFloat(deltaY))
+                return
+            }
+
             guard message.name == MarkdownWebBridge.scrollHandlerName,
                   scrollSyncEnabled,
                   !isNavigationInFlight,

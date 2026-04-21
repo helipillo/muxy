@@ -135,11 +135,12 @@ struct EditorPane: View {
                     scrollPosition: $state.markdownScrollPosition,
                     scrollSyncEnabled: usesLinkedMarkdownScrolling,
                     showsVerticalScroller: !usesLinkedMarkdownScrolling,
-                    onScrollProgressChanged: { progress in
+                    hidesContentScrollbar: usesLinkedMarkdownScrolling,
+                    linkedScrollEnabled: usesLinkedMarkdownScrolling,
+                    onScrollProgressChanged: nil,
+                    onLinkedScrollWheel: { deltaY in
                         guard usesLinkedMarkdownScrolling else { return }
-                        guard abs(state.markdownScrollPosition - progress) > 0.0005 else { return }
-                        state.markdownScrollDriver = .preview
-                        state.markdownScrollPosition = progress
+                        state.forwardLinkedMarkdownScroll(deltaY: deltaY)
                     }
                 )
             }

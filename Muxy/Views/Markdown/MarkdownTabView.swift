@@ -226,7 +226,8 @@ struct MarkdownWebView: NSViewRepresentable {
     let filePath: String?
     @Binding var scrollPosition: CGFloat
     var scrollSyncEnabled = true
-    var onScrollProgressChanged: ((CGFloat) -> Void)? = nil
+    var showsVerticalScroller = true
+    var onScrollProgressChanged: ((CGFloat) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -240,8 +241,10 @@ struct MarkdownWebView: NSViewRepresentable {
         webView.navigationDelegate = context.coordinator
         context.coordinator.configure(
             scrollSyncEnabled: scrollSyncEnabled,
+            showsVerticalScroller: showsVerticalScroller,
             onScrollProgressChanged: onScrollProgressChanged
         )
+        context.coordinator.updateScrollerVisibility(in: webView)
         if scrollSyncEnabled {
             context.coordinator.applyScrollProgress(scrollPosition, to: webView)
         }
@@ -253,8 +256,10 @@ struct MarkdownWebView: NSViewRepresentable {
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.configure(
             scrollSyncEnabled: scrollSyncEnabled,
+            showsVerticalScroller: showsVerticalScroller,
             onScrollProgressChanged: onScrollProgressChanged
         )
+        context.coordinator.updateScrollerVisibility(in: webView)
         context.coordinator.updateHTML(
             html,
             scrollPosition: scrollPosition,
@@ -271,6 +276,8 @@ struct MarkdownWebView: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        private static let programmaticScrollSuppressionWindow: TimeInterval = 0.2
+
         private var lastHTML: String = ""
         private var lastScrollProgress: CGFloat = -1
         private var lastReportedScrollProgress: CGFloat = -1
@@ -280,13 +287,30 @@ struct MarkdownWebView: NSViewRepresentable {
         private var currentFilePath: String?
         private var scrollSyncEnabled = true
         private var lastConfiguredScrollSyncEnabled = true
+        private var showsVerticalScroller = true
         private var onScrollProgressChanged: ((CGFloat) -> Void)?
         private var isApplyingProgrammaticScroll = false
         private var isNavigationInFlight = false
+        private var programmaticScrollSuppressionUntil: Date?
 
-        func configure(scrollSyncEnabled: Bool, onScrollProgressChanged: ((CGFloat) -> Void)?) {
+        func configure(
+            scrollSyncEnabled: Bool,
+            showsVerticalScroller: Bool,
+            onScrollProgressChanged: ((CGFloat) -> Void)?
+        ) {
             self.scrollSyncEnabled = scrollSyncEnabled
+            self.showsVerticalScroller = showsVerticalScroller
             self.onScrollProgressChanged = onScrollProgressChanged
+        }
+
+        func updateScrollerVisibility(in webView: WKWebView) {
+            guard let scrollView = webView.safeScrollView else { return }
+            if scrollView.hasVerticalScroller != showsVerticalScroller {
+                scrollView.hasVerticalScroller = showsVerticalScroller
+            }
+            if scrollView.autohidesScrollers != showsVerticalScroller {
+                scrollView.autohidesScrollers = showsVerticalScroller
+            }
         }
 
         func installBridge(into configuration: WKWebViewConfiguration) {
@@ -304,6 +328,7 @@ struct MarkdownWebView: NSViewRepresentable {
 
         func removeScrollObserver() {
             isApplyingProgrammaticScroll = false
+            programmaticScrollSuppressionUntil = nil
         }
 
         func loadHTML(_ html: String, filePath: String?, into webView: WKWebView) {
@@ -336,7 +361,7 @@ struct MarkdownWebView: NSViewRepresentable {
                     "Markdown web update seq=\(self.loadCount) path=\(filePath ?? "<nil>", privacy: .public) htmlLength=\(html.utf8.count) pendingScrollProgress=\(scrollPosition)"
                 )
                 activeNavigation = webView.loadHTMLString(html, baseURL: nil)
-            } else if scrollSyncEnabled, (syncWasJustEnabled || scrollPosition != lastScrollProgress), scrollPosition >= 0 {
+            } else if scrollSyncEnabled, syncWasJustEnabled || scrollPosition != lastScrollProgress, scrollPosition >= 0 {
                 applyScrollProgress(scrollPosition, to: webView)
             }
         }
@@ -396,7 +421,20 @@ struct MarkdownWebView: NSViewRepresentable {
 
             let clampedProgress = min(max(CGFloat(progress), 0), 1)
 
+            if let suppressionUntil = programmaticScrollSuppressionUntil, Date() < suppressionUntil {
+                lastReportedScrollProgress = clampedProgress
+                return
+            }
+
+            programmaticScrollSuppressionUntil = nil
+
             if isApplyingProgrammaticScroll, abs(clampedProgress - lastScrollProgress) <= 0.0005 {
+                isApplyingProgrammaticScroll = false
+                lastReportedScrollProgress = clampedProgress
+                return
+            }
+
+            if isApplyingProgrammaticScroll {
                 isApplyingProgrammaticScroll = false
                 lastReportedScrollProgress = clampedProgress
                 return
@@ -415,10 +453,12 @@ struct MarkdownWebView: NSViewRepresentable {
             guard abs(lastScrollProgress - clampedProgress) > 0.0005 else { return }
 
             isApplyingProgrammaticScroll = true
+            programmaticScrollSuppressionUntil = Date().addingTimeInterval(Self.programmaticScrollSuppressionWindow)
             let script = MarkdownWebBridge.scrollToProgressScript(clampedProgress)
             webView.evaluateJavaScript(script) { _, error in
                 if let error {
                     self.isApplyingProgrammaticScroll = false
+                    self.programmaticScrollSuppressionUntil = nil
                     markdownWebLogger.error(
                         "Failed applying markdown scroll progress: \(error.localizedDescription, privacy: .public)"
                     )

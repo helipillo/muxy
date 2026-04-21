@@ -142,6 +142,7 @@ struct CodeEditorView: NSViewRepresentable {
     @Bindable var state: EditorTabState
     let editorSettings: EditorSettings
     let themeVersion: Int
+    let showsVerticalScroller: Bool
     let focused: Bool
     let searchNeedle: String
     let searchNavigationVersion: Int
@@ -159,7 +160,7 @@ struct CodeEditorView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
+        scrollView.hasVerticalScroller = showsVerticalScroller
         scrollView.hasHorizontalScroller = true
         scrollView.autoresizingMask = [.width, .height]
 
@@ -214,7 +215,7 @@ struct CodeEditorView: NSViewRepresentable {
             .backgroundColor: GhosttyService.shared.foregroundColor.withAlphaComponent(0.15),
         ]
 
-        scrollView.autohidesScrollers = true
+        scrollView.autohidesScrollers = showsVerticalScroller
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -277,6 +278,11 @@ struct CodeEditorView: NSViewRepresentable {
         guard let textView = context.coordinator.textView else { return }
         let coordinator = context.coordinator
 
+        if scrollView.hasVerticalScroller != showsVerticalScroller {
+            scrollView.hasVerticalScroller = showsVerticalScroller
+            scrollView.autohidesScrollers = showsVerticalScroller
+        }
+
         if state.backingStore != nil, coordinator.viewportState == nil {
             coordinator.enterViewportMode(scrollView: scrollView)
         }
@@ -338,7 +344,9 @@ struct CodeEditorView: NSViewRepresentable {
 
         updateSearchViewport(coordinator: coordinator)
         coordinator.syncMarkdownScrollPositionIfNeeded()
-        coordinator.updateMarkdownPreviewScrollProgress()
+        if state.markdownScrollDriver != .preview {
+            coordinator.updateMarkdownPreviewScrollProgress()
+        }
 
         if coordinator.lastEditorFocusVersion != editorFocusVersion {
             coordinator.lastEditorFocusVersion = editorFocusVersion
@@ -1069,6 +1077,7 @@ struct CodeEditorView: NSViewRepresentable {
             guard state.isMarkdownFile,
                   state.markdownViewMode == .split,
                   state.markdownScrollSyncEnabled,
+                  state.markdownScrollDriver == .preview,
                   let scrollView
             else { return }
 
@@ -1092,12 +1101,14 @@ struct CodeEditorView: NSViewRepresentable {
             guard state.isMarkdownFile,
                   state.markdownViewMode == .split,
                   state.markdownScrollSyncEnabled,
+                  state.markdownScrollDriver != .preview,
                   let scrollView
             else { return }
 
             let progress = markdownScrollProgress(for: scrollView)
 
             guard abs(state.markdownScrollPosition - progress) > 0.0005 else { return }
+            state.markdownScrollDriver = .editor
             state.markdownScrollPosition = progress
         }
 

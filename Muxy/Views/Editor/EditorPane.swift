@@ -109,6 +109,7 @@ struct EditorPane: View {
                 state: state,
                 editorSettings: editorSettings,
                 themeVersion: ghostty.configVersion,
+                showsVerticalScroller: true,
                 focused: focused,
                 searchNeedle: state.searchNeedle,
                 searchNavigationVersion: state.searchNavigationVersion,
@@ -124,17 +125,25 @@ struct EditorPane: View {
     }
 
     private var markdownPreviewContainer: some View {
-        MarkdownWebView(
-            html: renderedMarkdownHTML,
-            filePath: state.filePath,
-            scrollPosition: $state.markdownScrollPosition,
-            scrollSyncEnabled: state.markdownViewMode == .split && state.markdownScrollSyncEnabled,
-            onScrollProgressChanged: { progress in
-                guard state.markdownViewMode == .split, state.markdownScrollSyncEnabled else { return }
-                guard abs(state.markdownScrollPosition - progress) > 0.0005 else { return }
-                state.markdownScrollPosition = progress
+        Group {
+            if shouldDelayMarkdownPreview {
+                markdownPreviewLoadingView
+            } else {
+                MarkdownWebView(
+                    html: renderedMarkdownHTML,
+                    filePath: state.filePath,
+                    scrollPosition: $state.markdownScrollPosition,
+                    scrollSyncEnabled: usesLinkedMarkdownScrolling,
+                    showsVerticalScroller: !usesLinkedMarkdownScrolling,
+                    onScrollProgressChanged: { progress in
+                        guard usesLinkedMarkdownScrolling else { return }
+                        guard abs(state.markdownScrollPosition - progress) > 0.0005 else { return }
+                        state.markdownScrollDriver = .preview
+                        state.markdownScrollPosition = progress
+                    }
+                )
             }
-        )
+        }
         .background(MuxyTheme.bg)
     }
 
@@ -146,6 +155,26 @@ struct EditorPane: View {
             fgColor: ghostty.foregroundColor,
             accentColor: ghostty.accentColor
         )
+    }
+
+    private var usesLinkedMarkdownScrolling: Bool {
+        state.markdownViewMode == .split && state.markdownScrollSyncEnabled && !shouldDelayMarkdownPreview
+    }
+
+    private var shouldDelayMarkdownPreview: Bool {
+        state.isMarkdownFile && state.isIncrementalLoading
+    }
+
+    private var markdownPreviewLoadingView: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Loading full markdown preview...")
+                .font(.system(size: 12))
+                .foregroundStyle(MuxyTheme.fgMuted)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(MuxyTheme.bg)
     }
 
     private var showsCodeEditor: Bool {

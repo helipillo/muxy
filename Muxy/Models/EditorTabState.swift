@@ -1,5 +1,5 @@
-import Foundation
 import CoreGraphics
+import Foundation
 
 enum EditorSearchNavigationDirection {
     case next
@@ -13,19 +13,24 @@ enum EditorMarkdownViewMode: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .code: return "Code"
-        case .preview: return "Preview"
-        case .split: return "Split"
+        case .code: "Code"
+        case .preview: "Preview"
+        case .split: "Split"
         }
     }
 
     var symbol: String {
         switch self {
-        case .code: return "curlybraces"
-        case .preview: return "doc.richtext"
-        case .split: return "rectangle.split.2x1"
+        case .code: "curlybraces"
+        case .preview: "doc.richtext"
+        case .split: "rectangle.split.2x1"
         }
     }
+}
+
+enum EditorMarkdownScrollDriver {
+    case editor
+    case preview
 }
 
 @MainActor
@@ -67,6 +72,7 @@ final class EditorTabState: Identifiable {
     var markdownViewMode: EditorMarkdownViewMode = .code
     var markdownScrollPosition: CGFloat = 0
     var markdownScrollSyncEnabled = true
+    var markdownScrollDriver: EditorMarkdownScrollDriver = .editor
 
     static let largeFileWarningThreshold: Int64 = 5 * 1024 * 1024
     static let largeFileRefuseThreshold: Int64 = 50 * 1024 * 1024

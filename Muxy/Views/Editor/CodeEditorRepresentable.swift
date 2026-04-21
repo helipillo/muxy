@@ -505,12 +505,6 @@ struct CodeEditorView: NSViewRepresentable {
             self.state = state
             self.editorSettings = editorSettings
             super.init()
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(handleMarkdownPreviewScrollWheel(_:)),
-                name: .markdownPreviewScrollWheel,
-                object: nil
-            )
         }
 
         deinit {
@@ -1088,41 +1082,6 @@ struct CodeEditorView: NSViewRepresentable {
 
             guard abs(state.markdownScrollPosition - progress) > 0.0005 else { return }
             state.markdownScrollPosition = progress
-        }
-
-        @objc
-        private func handleMarkdownPreviewScrollWheel(_ notification: Notification) {
-            guard state.isMarkdownFile,
-                  state.markdownViewMode == .split,
-                  state.markdownScrollSyncEnabled,
-                  let tabID = notification.userInfo?["tabID"] as? String,
-                  tabID == state.id.uuidString,
-                  let deltaY = notification.userInfo?["deltaY"] as? CGFloat
-            else { return }
-
-            applyForwardedMarkdownScrollDelta(deltaY)
-        }
-
-        private func applyForwardedMarkdownScrollDelta(_ deltaY: CGFloat) {
-            guard let scrollView else { return }
-
-            let visibleHeight = scrollView.contentView.bounds.height
-            let documentHeight = scrollView.documentView?.bounds.height ?? 0
-            let maxScrollY = max(0, documentHeight - visibleHeight)
-            guard maxScrollY > 0 else { return }
-
-            let currentY = scrollView.contentView.bounds.origin.y
-            let proposedY = min(max(currentY - deltaY, 0), maxScrollY)
-            guard abs(proposedY - currentY) > 0.5 else { return }
-
-            isApplyingMarkdownScroll = true
-            scrollView.contentView.setBoundsOrigin(NSPoint(x: scrollView.contentView.bounds.origin.x, y: proposedY))
-            scrollView.reflectScrolledClipView(scrollView.contentView)
-
-            let progress = proposedY / maxScrollY
-            if abs(state.markdownScrollPosition - progress) > 0.0005 {
-                state.markdownScrollPosition = progress
-            }
         }
 
         private func markdownScrollProgress(for scrollView: NSScrollView) -> CGFloat {

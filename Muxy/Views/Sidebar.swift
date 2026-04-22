@@ -240,6 +240,7 @@ private struct AddProjectButton: View {
 
 struct SidebarFooter: View {
     var expanded: Bool = false
+    @AppStorage(AIUsageSettingsStore.usageEnabledKey) private var usageEnabled = false
     @State private var showThemePicker = false
     @State private var showNotifications = false
     @State private var showAIUsagePopover = false
@@ -272,7 +273,13 @@ struct SidebarFooter: View {
             showNotifications.toggle()
         }
         .onReceive(NotificationCenter.default.publisher(for: .toggleAIUsage)) { _ in
+            guard usageEnabled else { return }
             showAIUsagePopover.toggle()
+        }
+        .onChange(of: usageEnabled) { _, enabled in
+            if !enabled {
+                showAIUsagePopover = false
+            }
         }
     }
 
@@ -298,16 +305,18 @@ struct SidebarFooter: View {
 
     private var collapsedFooter: some View {
         VStack(spacing: 4) {
-            IconButton(symbol: aiUsageIcon, accessibilityLabel: "AI Usage") { showAIUsagePopover.toggle() }
-                .help("AI Usage (\(KeyBindingStore.shared.combo(for: .toggleAIUsage).displayString))")
-                .popover(isPresented: $showAIUsagePopover) {
-                    AIUsagePanel(
-                        snapshots: usageService.snapshots,
-                        isRefreshing: usageService.isRefreshing,
-                        lastRefreshDate: usageService.lastRefreshDate,
-                        onRefresh: refreshUsage
-                    )
-                }
+            if usageEnabled {
+                IconButton(symbol: aiUsageIcon, accessibilityLabel: "AI Usage") { showAIUsagePopover.toggle() }
+                    .help("AI Usage (\(KeyBindingStore.shared.combo(for: .toggleAIUsage).displayString))")
+                    .popover(isPresented: $showAIUsagePopover) {
+                        AIUsagePanel(
+                            snapshots: usageService.snapshots,
+                            isRefreshing: usageService.isRefreshing,
+                            lastRefreshDate: usageService.lastRefreshDate,
+                            onRefresh: refreshUsage
+                        )
+                    }
+            }
             IconButton(symbol: notificationBellIcon, accessibilityLabel: "Notifications") { showNotifications.toggle() }
                 .help("Notifications")
                 .popover(isPresented: $showNotifications) {
@@ -329,16 +338,18 @@ struct SidebarFooter: View {
 
             Spacer()
 
-            IconButton(symbol: aiUsageIcon, accessibilityLabel: "AI Usage") { showAIUsagePopover.toggle() }
-                .help("AI Usage (\(KeyBindingStore.shared.combo(for: .toggleAIUsage).displayString))")
-                .popover(isPresented: $showAIUsagePopover) {
-                    AIUsagePanel(
-                        snapshots: usageService.snapshots,
-                        isRefreshing: usageService.isRefreshing,
-                        lastRefreshDate: usageService.lastRefreshDate,
-                        onRefresh: refreshUsage
-                    )
-                }
+            if usageEnabled {
+                IconButton(symbol: aiUsageIcon, accessibilityLabel: "AI Usage") { showAIUsagePopover.toggle() }
+                    .help("AI Usage (\(KeyBindingStore.shared.combo(for: .toggleAIUsage).displayString))")
+                    .popover(isPresented: $showAIUsagePopover) {
+                        AIUsagePanel(
+                            snapshots: usageService.snapshots,
+                            isRefreshing: usageService.isRefreshing,
+                            lastRefreshDate: usageService.lastRefreshDate,
+                            onRefresh: refreshUsage
+                        )
+                    }
+            }
             IconButton(symbol: notificationBellIcon, accessibilityLabel: "Notifications") { showNotifications.toggle() }
                 .help("Notifications")
                 .popover(isPresented: $showNotifications) {
@@ -455,7 +466,8 @@ private struct AIUsageMetricRowView: View {
     let row: AIUsageMetricRow
     let fetchedAt: Date
 
-    @AppStorage(AIUsageSettingsStore.usageDisplayModeKey) private var usageDisplayModeRaw = AIUsageSettingsStore.defaultUsageDisplayMode.rawValue
+    @AppStorage(AIUsageSettingsStore.usageDisplayModeKey) private var usageDisplayModeRaw = AIUsageSettingsStore.defaultUsageDisplayMode
+        .rawValue
 
     private var usageDisplayMode: AIUsageDisplayMode {
         AIUsageDisplayMode(rawValue: usageDisplayModeRaw) ?? AIUsageSettingsStore.defaultUsageDisplayMode
@@ -555,7 +567,13 @@ private struct AIUsageMetricRowView: View {
         return "\(AIUsageParserSupport.formatNumber(used))% used"
     }
 
-    private func fractionMatch(from detail: String) -> (left: Double, total: Double, isRemainingLabel: Bool)? {
+    private struct FractionMatch {
+        let left: Double
+        let total: Double
+        let isRemainingLabel: Bool
+    }
+
+    private func fractionMatch(from detail: String) -> FractionMatch? {
         let pattern = #"^\s*([0-9]+(?:\.[0-9]+)?)\s*/\s*([0-9]+(?:\.[0-9]+)?)(?:\s*(left|remaining))?\s*$"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
         let range = NSRange(detail.startIndex ..< detail.endIndex, in: detail)
@@ -572,7 +590,7 @@ private struct AIUsageMetricRowView: View {
 
         let remainingRange = match.range(at: 3)
         let isRemainingLabel = remainingRange.location != NSNotFound
-        return (left, total, isRemainingLabel)
+        return FractionMatch(left: left, total: total, isRemainingLabel: isRemainingLabel)
     }
 
     private func percentMatch(from detail: String, modeToken: String) -> Double? {
@@ -599,6 +617,7 @@ private struct AIUsageMetricRowView: View {
             return max(0, min(100, 100 - clamped))
         }
     }
+
     private static let resetFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .none

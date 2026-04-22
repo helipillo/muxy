@@ -16,15 +16,15 @@ enum MiniMaxUsageClientError: Error {
 }
 
 enum MiniMaxUsageAPIClient {
-    private static let globalEndpoints: [URL] = [
-        URL(string: "https://api.minimax.io/v1/api/openplatform/coding_plan/remains")!,
-        URL(string: "https://api.minimax.io/v1/coding_plan/remains")!,
-        URL(string: "https://www.minimax.io/v1/api/openplatform/coding_plan/remains")!,
+    private static let globalEndpoints: [URL?] = [
+        URL(string: "https://api.minimax.io/v1/api/openplatform/coding_plan/remains"),
+        URL(string: "https://api.minimax.io/v1/coding_plan/remains"),
+        URL(string: "https://www.minimax.io/v1/api/openplatform/coding_plan/remains"),
     ]
 
-    private static let cnEndpoints: [URL] = [
-        URL(string: "https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains")!,
-        URL(string: "https://api.minimaxi.com/v1/coding_plan/remains")!,
+    private static let cnEndpoints: [URL?] = [
+        URL(string: "https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains"),
+        URL(string: "https://api.minimaxi.com/v1/coding_plan/remains"),
     ]
 
     static func fetchSnapshot(for provider: AIProviderUsageDescriptor) async -> AIProviderUsageSnapshot {
@@ -254,7 +254,9 @@ enum MiniMaxUsageAPIClient {
                 let data = try Data(contentsOf: URL(fileURLWithPath: path))
                 guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
 
-                if let token = AIUsageParserSupport.string(in: payload, keys: ["api_key", "apiKey", "token", "access_token"]), !token.isEmpty {
+                if let token = AIUsageParserSupport.string(in: payload, keys: ["api_key", "apiKey", "token", "access_token"]),
+                   !token.isEmpty
+                {
                     return token
                 }
 
@@ -306,12 +308,13 @@ enum MiniMaxUsageAPIClient {
     }
 
     private static func endpoints(for region: MiniMaxRegion) -> [URL] {
-        switch region {
+        let urls: [URL?] = switch region {
         case .global:
-            return globalEndpoints
+            globalEndpoints
         case .cn:
-            return cnEndpoints
+            cnEndpoints
         }
+        return urls.compactMap(\.self)
     }
 
     private static func buildRegionAttempts(

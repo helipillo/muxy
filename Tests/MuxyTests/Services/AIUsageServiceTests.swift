@@ -199,7 +199,7 @@ struct AIUsageServiceTests {
         #expect(composed[1].state == .available)
 
         if case let .unavailable(message) = composed[0].state {
-            #expect(message == "Disabled")
+            #expect(message == "Usage disabled")
         } else {
             Issue.record("Expected disabled provider to map to unavailable Disabled state")
         }

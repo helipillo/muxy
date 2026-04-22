@@ -1,13 +1,14 @@
 import Foundation
 
 enum AmpUsageAPIClient {
-    private static let endpointURL = URL(string: "https://ampcode.com/api/internal")!
+    private static let endpointURL: URL? = URL(string: "https://ampcode.com/api/internal")
 
     static func fetchSnapshot(for provider: AIProviderUsageDescriptor) async -> AIProviderUsageSnapshot {
         do {
             let token = try readToken()
 
-            var request = URLRequest(url: endpointURL)
+            guard let url = endpointURL else { throw ClaudeUsageError.missingAccessToken }
+            var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("application/json", forHTTPHeaderField: "Accept")

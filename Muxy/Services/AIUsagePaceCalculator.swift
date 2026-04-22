@@ -72,13 +72,12 @@ enum AIUsagePaceCalculator {
         let projectedUsedPercent = max(0, min(100, projectedUsedAtReset))
         let projectedLeftPercent = max(0, min(100, 100 - projectedUsedPercent.rounded()))
 
-        let status: AIUsagePaceStatus
-        if projectedUsedAtReset <= limitPercent * 0.8 {
-            status = .ahead
+        let status: AIUsagePaceStatus = if projectedUsedAtReset <= limitPercent * 0.8 {
+            .ahead
         } else if projectedUsedAtReset <= limitPercent {
-            status = .onTrack
+            .onTrack
         } else {
-            status = .behind
+            .behind
         }
 
         let expectedUsage = elapsedFraction * limitPercent

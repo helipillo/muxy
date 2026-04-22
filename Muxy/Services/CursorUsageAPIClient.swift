@@ -1,10 +1,10 @@
 import Foundation
 
 enum CursorUsageAPIClient {
-    private static let baseURL = URL(string: "https://api2.cursor.sh")!
-    private static let usageURL = baseURL.appendingPathComponent("aiserver.v1.DashboardService/GetCurrentPeriodUsage")
-    private static let planURL = baseURL.appendingPathComponent("aiserver.v1.DashboardService/GetPlanInfo")
-    private static let refreshURL = baseURL.appendingPathComponent("oauth/token")
+    private static let baseURL: URL? = URL(string: "https://api2.cursor.sh")
+    private static var usageURL: URL? { baseURL?.appendingPathComponent("aiserver.v1.DashboardService/GetCurrentPeriodUsage") }
+    private static var planURL: URL? { baseURL?.appendingPathComponent("aiserver.v1.DashboardService/GetPlanInfo") }
+    private static var refreshURL: URL? { baseURL?.appendingPathComponent("oauth/token") }
     private static let refreshClientID = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB"
 
     private enum TokenSource {
@@ -34,12 +34,14 @@ enum CursorUsageAPIClient {
                 throw ClaudeUsageError.missingAccessToken
             }
 
-            var usageResponse = try await connectPost(url: usageURL, accessToken: accessToken)
+            guard let url = usageURL else { throw ClaudeUsageError.missingAccessToken }
+            var usageResponse = try await connectPost(url: url, accessToken: accessToken)
             if usageResponse.statusCode == 401, let refreshToken = authState.refreshToken,
                let refreshed = try await refreshAccessToken(refreshToken: refreshToken, source: authState.source)
             {
                 accessToken = refreshed
-                usageResponse = try await connectPost(url: usageURL, accessToken: accessToken)
+                guard let url = usageURL else { throw ClaudeUsageError.missingAccessToken }
+                usageResponse = try await connectPost(url: url, accessToken: accessToken)
             }
 
             if usageResponse.statusCode == 401 || usageResponse.statusCode == 403 {
@@ -57,7 +59,8 @@ enum CursorUsageAPIClient {
 
             let planData: Data?
             do {
-                let planResponse = try await connectPost(url: planURL, accessToken: accessToken)
+                guard let url = planURL else { throw ClaudeUsageError.missingAccessToken }
+                let planResponse = try await connectPost(url: url, accessToken: accessToken)
                 planData = (200 ..< 300).contains(planResponse.statusCode) ? planResponse.data : nil
             } catch {
                 planData = nil
@@ -178,13 +181,17 @@ enum CursorUsageAPIClient {
     }
 
     private static func writeKeychain(service: String, value: String) {
-        _ = runCommand(executable: "/usr/bin/security", arguments: ["add-generic-password", "-a", NSUserName(), "-s", service, "-w", value, "-U"])
+        _ = runCommand(
+            executable: "/usr/bin/security",
+            arguments: ["add-generic-password", "-a", NSUserName(), "-s", service, "-w", value, "-U"]
+        )
     }
 
     private static func refreshAccessToken(refreshToken: String, source: TokenSource) async throws -> String? {
         guard !refreshToken.isEmpty else { return nil }
 
-        var request = URLRequest(url: refreshURL)
+        guard let url = refreshURL else { return nil }
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 

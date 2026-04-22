@@ -1,13 +1,14 @@
 import Foundation
 
 enum CopilotUsageAPIClient {
-    private static let endpointURL = URL(string: "https://api.github.com/copilot_internal/user")!
+    private static let endpointURL: URL? = URL(string: "https://api.github.com/copilot_internal/user")
 
     static func fetchSnapshot(for provider: AIProviderUsageDescriptor) async -> AIProviderUsageSnapshot {
         do {
             let token = try readToken()
 
-            var request = URLRequest(url: endpointURL)
+            guard let url = endpointURL else { throw ClaudeUsageError.missingAccessToken }
+            var request = URLRequest(url: url)
             request.httpMethod = "GET"
             request.setValue("token \(token)", forHTTPHeaderField: "Authorization")
             request.setValue("application/json", forHTTPHeaderField: "Accept")

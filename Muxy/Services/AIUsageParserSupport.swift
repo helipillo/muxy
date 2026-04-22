@@ -23,7 +23,20 @@ enum AIUsageParserSupport {
             let used = number(in: window, keys: ["used", "usage", "consumed", "current", "spent"])
             let limit = number(in: window, keys: ["limit", "max", "quota", "total", "entitlement"])
             let percent = utilizationPercent(used: used, limit: limit)
-            let resetDate = date(in: window, keys: ["reset_at", "resets_at", "resetAt", "reset", "window_end", "period_end", "end_time", "quota_reset_date", "limited_user_reset_date"])
+            let resetDate = date(
+                in: window,
+                keys: [
+                    "reset_at",
+                    "resets_at",
+                    "resetAt",
+                    "reset",
+                    "window_end",
+                    "period_end",
+                    "end_time",
+                    "quota_reset_date",
+                    "limited_user_reset_date",
+                ]
+            )
             let detail = usageDetail(used: used, limit: limit)
 
             guard percent != nil || resetDate != nil || detail != nil else { continue }

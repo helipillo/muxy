@@ -76,7 +76,10 @@ enum MiniMaxUsageParser {
         guard let remains = modelRemainsArray(in: payload), !remains.isEmpty else { return nil }
 
         let selectedRow = remains.first { row in
-            if let total = AIUsageParserSupport.number(in: row, keys: ["current_interval_total_count", "currentIntervalTotalCount", "total", "limit"]) {
+            if let total = AIUsageParserSupport.number(
+                in: row,
+                keys: ["current_interval_total_count", "currentIntervalTotalCount", "total", "limit"]
+            ) {
                 return total > 0
             }
             return false
@@ -130,14 +133,14 @@ enum MiniMaxUsageParser {
                 in: payload,
                 keys: ["current_subscribe_title", "plan_name", "plan", "current_plan_title", "combo_title"]
             )
-            ?? AIUsageParserSupport.string(
-                in: rootPayload,
-                keys: ["current_subscribe_title", "plan_name", "plan", "current_plan_title", "combo_title"]
-            )
-            ?? AIUsageParserSupport.string(
-                in: selectedRow,
-                keys: ["current_subscribe_title", "plan_name", "plan"]
-            )
+                ?? AIUsageParserSupport.string(
+                    in: rootPayload,
+                    keys: ["current_subscribe_title", "plan_name", "plan", "current_plan_title", "combo_title"]
+                )
+                ?? AIUsageParserSupport.string(
+                    in: selectedRow,
+                    keys: ["current_subscribe_title", "plan_name", "plan"]
+                )
         )
 
         let inferredPlan = inferPlanName(fromLimit: totalRaw, region: region)
@@ -146,7 +149,11 @@ enum MiniMaxUsageParser {
         let scale = region == .cn ? (1 / modelCallsPerPrompt) : 1
         let total = round(totalRaw * scale)
 
-        let label = plan?.isEmpty == false ? "Session (\(plan!))" : "Session"
+        let label = if let plan, !plan.isEmpty {
+            "Session (\(plan))"
+        } else {
+            "Session"
+        }
 
         return AIUsageMetricRow(
             label: label,
@@ -251,7 +258,7 @@ enum MiniMaxUsageParser {
             if let direct = globalPromptLimitToPlan[normalized] {
                 return direct
             }
-            if normalized % Int(modelCallsPerPrompt) != 0 {
+            if !normalized.isMultiple(of: Int(modelCallsPerPrompt)) {
                 return nil
             }
             return globalPromptLimitToPlan[normalized / Int(modelCallsPerPrompt)]

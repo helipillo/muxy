@@ -101,6 +101,7 @@ enum AIUsageDisplayMode: String, CaseIterable, Identifiable {
 enum AIUsageSettingsStore {
     static let autoRefreshIntervalKey = "muxy.usage.autoRefreshIntervalSeconds"
     static let usageDisplayModeKey = "muxy.usage.displayMode"
+    static let usageEnabledKey = "muxy.usage.enabled"
 
     static let defaultAutoRefreshInterval: AIUsageAutoRefreshInterval = .fiveMinutes
     static let defaultUsageDisplayMode: AIUsageDisplayMode = .used
@@ -129,6 +130,29 @@ enum AIUsageSettingsStore {
 
     static func setUsageDisplayMode(_ mode: AIUsageDisplayMode, defaults: UserDefaults = .standard) {
         defaults.set(mode.rawValue, forKey: usageDisplayModeKey)
+    }
+
+    @MainActor
+    static func isUsageEnabled(defaults: UserDefaults = .standard) -> Bool {
+        if defaults.object(forKey: usageEnabledKey) != nil {
+            return defaults.bool(forKey: usageEnabledKey)
+        }
+
+        var enabled = false
+        for provider in AIUsageProviderCatalog.providers where AIUsageProviderTrackingStore.trackedPreference(
+            providerID: provider.id,
+            defaults: defaults
+        ) == true {
+            enabled = true
+            break
+        }
+
+        defaults.set(enabled, forKey: usageEnabledKey)
+        return enabled
+    }
+
+    static func setUsageEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: usageEnabledKey)
     }
 }
 
@@ -257,7 +281,7 @@ enum AIUsageSnapshotComposer {
                     providerID: provider.providerID,
                     providerName: provider.providerName,
                     providerIconName: provider.providerIconName,
-                    state: .unavailable(message: "Disabled"),
+                    state: .unavailable(message: "Usage disabled"),
                     rows: []
                 )
             }
@@ -270,7 +294,7 @@ enum AIUsageSnapshotComposer {
                 providerID: provider.providerID,
                 providerName: provider.providerName,
                 providerIconName: provider.providerIconName,
-                state: .unavailable(message: "Usage unavailable"),
+                state: .unavailable(message: "No usage data"),
                 rows: []
             )
         }
@@ -294,7 +318,8 @@ enum AIUsageSnapshotMerger {
             switch existing.state {
             case .available:
                 continue
-            case .unavailable, .error:
+            case .unavailable,
+                 .error:
                 byID[key] = snapshot
             }
         }
@@ -340,11 +365,7 @@ final class AIUsageService {
                     trackedProviderIDs.insert(providerID)
                 }
 
-                if provider.hasNotificationIntegration {
-                    enabledByProviderID[providerID] = AIUsageProviderCatalog.notificationProvider(providerID: providerID)?.isEnabled ?? false
-                } else {
-                    enabledByProviderID[providerID] = AIUsageProviderEnabledStore.isEnabled(providerID: providerID, defaults: defaults)
-                }
+                enabledByProviderID[providerID] = AIUsageProviderEnabledStore.isEnabled(providerID: providerID, defaults: defaults)
             }
 
             self.trackedProviderIDs = trackedProviderIDs
@@ -353,6 +374,8 @@ final class AIUsageService {
     }
 
     func refreshIfNeeded(force: Bool = false) async {
+        guard AIUsageSettingsStore.isUsageEnabled() else { return }
+
         if let refreshTask {
             _ = await refreshTask.value
             return
@@ -364,6 +387,8 @@ final class AIUsageService {
     }
 
     func refresh(force: Bool = false) async {
+        guard AIUsageSettingsStore.isUsageEnabled() else { return }
+
         if let refreshTask {
             _ = await refreshTask.value
             return
@@ -399,12 +424,10 @@ final class AIUsageService {
             async let nativeSnapshots = AIUsageFetcher.fetchSnapshots(for: nativeProviderDescriptors)
             async let openUsageSnapshots = OpenUsageAPIClient.fetchSnapshots(for: enabledProviderDescriptors)
 
-            let mergedSnapshots = AIUsageSnapshotMerger.merge(
-                nativeSnapshots: await nativeSnapshots,
-                openUsageSnapshots: await openUsageSnapshots
+            return await AIUsageSnapshotMerger.merge(
+                nativeSnapshots: nativeSnapshots,
+                openUsageSnapshots: openUsageSnapshots
             )
-
-            return mergedSnapshots
         }
 
         refreshTask = task
@@ -466,10 +489,16 @@ final class AIUsageService {
 enum AIUsageFetcher {
     static func supportsNativeCollector(providerID: String) -> Bool {
         switch canonicalAIUsageProviderID(providerID) {
-        case "claude", "codex", "copilot", "minimax", "cursor", "amp", "zai":
-            return true
+        case "claude",
+             "codex",
+             "copilot",
+             "minimax",
+             "cursor",
+             "amp",
+             "zai":
+            true
         default:
-            return false
+            false
         }
     }
 
@@ -515,10 +544,18 @@ enum AIUsageFetcher {
                 providerID: provider.providerID,
                 providerName: provider.providerName,
                 providerIconName: provider.providerIconName,
-                state: .unavailable(message: "Usage unavailable"),
+                state: .unavailable(message: "No usage data"),
                 rows: []
             )
-        case "gemini", "opencode-go", "windsurf", "kimi", "kiro", "antigravity", "factory", "jetbrains-ai-assistant", "perplexity":
+        case "gemini",
+             "opencode-go",
+             "windsurf",
+             "kimi",
+             "kiro",
+             "antigravity",
+             "factory",
+             "jetbrains-ai-assistant",
+             "perplexity":
             AIProviderUsageSnapshot(
                 providerID: provider.providerID,
                 providerName: provider.providerName,
@@ -539,7 +576,7 @@ enum AIUsageFetcher {
 }
 
 enum OpenUsageAPIClient {
-    private static let endpointURL = URL(string: "http://127.0.0.1:6736/v1/usage")!
+    private static let endpointURL: URL? = URL(string: "http://127.0.0.1:6736/v1/usage")
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 1.5
@@ -550,7 +587,8 @@ enum OpenUsageAPIClient {
 
     static func fetchSnapshots(for providers: [AIProviderUsageDescriptor]) async -> [AIProviderUsageSnapshot] {
         do {
-            var request = URLRequest(url: endpointURL)
+            guard let url = endpointURL else { return [] }
+            var request = URLRequest(url: url)
             request.httpMethod = "GET"
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.timeoutInterval = 1.5
@@ -620,22 +658,22 @@ enum OpenUsageAPIClient {
         let label = extractString(from: rawLine, keys: ["label", "name", "title"]) ?? "Usage"
         let resetDate = extractDate(from: rawLine, keys: ["resetsAt", "resetAt", "resetDate"])
 
-        if lineType == "progress" || (extractDouble(from: rawLine, keys: ["used"]) != nil && extractDouble(from: rawLine, keys: ["limit"]) != nil) {
+        if lineType == "progress" ||
+            (extractDouble(from: rawLine, keys: ["used"]) != nil && extractDouble(from: rawLine, keys: ["limit"]) != nil)
+        {
             let used = extractDouble(from: rawLine, keys: ["used", "current", "value"])
             let limit = extractDouble(from: rawLine, keys: ["limit", "max", "total"])
 
-            let percent: Double?
-            if let used, let limit, limit > 0 {
-                percent = max(0, min(100, (used / limit) * 100))
+            let percent: Double? = if let used, let limit, limit > 0 {
+                max(0, min(100, (used / limit) * 100))
             } else {
-                percent = nil
+                nil
             }
 
-            let detail: String?
-            if let used, let limit {
-                detail = "\(formatUsageNumber(used))/\(formatUsageNumber(limit))"
+            let detail: String? = if let used, let limit {
+                "\(formatUsageNumber(used))/\(formatUsageNumber(limit))"
             } else {
-                detail = nil
+                nil
             }
 
             return AIUsageMetricRow(label: label, percent: percent, resetDate: resetDate, detail: detail)
@@ -707,7 +745,7 @@ enum OpenUsageAPIClient {
 
             if let number = value as? NSNumber {
                 let raw = number.doubleValue
-                let seconds = raw > 10_000_000_000 ? raw / 1_000 : raw
+                let seconds = raw > 10_000_000_000 ? raw / 1000 : raw
                 return Date(timeIntervalSince1970: seconds)
             }
         }
@@ -727,13 +765,14 @@ enum OpenUsageAPIClient {
 
 enum ClaudeUsageAPIClient {
     private static let credentialsPath = NSHomeDirectory() + "/.claude/.credentials.json"
-    private static let endpointURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    private static let endpointURL: URL? = URL(string: "https://api.anthropic.com/api/oauth/usage")
 
     static func fetchSnapshot(for provider: AIProviderUsageDescriptor) async -> AIProviderUsageSnapshot {
         do {
             let token = try readAccessToken()
 
-            var request = URLRequest(url: endpointURL)
+            guard let url = endpointURL else { throw ClaudeUsageError.missingAccessToken }
+            var request = URLRequest(url: url)
             request.httpMethod = "GET"
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue("application/json", forHTTPHeaderField: "Accept")

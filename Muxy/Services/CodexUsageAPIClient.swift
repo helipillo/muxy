@@ -1,13 +1,14 @@
 import Foundation
 
 enum CodexUsageAPIClient {
-    private static let endpointURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
+    private static let endpointURL: URL? = URL(string: "https://chatgpt.com/backend-api/wham/usage")
 
     static func fetchSnapshot(for provider: AIProviderUsageDescriptor) async -> AIProviderUsageSnapshot {
         do {
             let auth = try readAuth()
 
-            var request = URLRequest(url: endpointURL)
+            guard let url = endpointURL else { throw ClaudeUsageError.invalidResponse }
+            var request = URLRequest(url: url)
             request.httpMethod = "GET"
             request.setValue("Bearer \(auth.accessToken)", forHTTPHeaderField: "Authorization")
             request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -80,7 +81,7 @@ enum CodexUsageAPIClient {
             (env["CODEX_HOME"].map { "\($0)/auth.json" }),
             "\(home)/.config/codex/auth.json",
             "\(home)/.codex/auth.json",
-        ].compactMap { $0 }
+        ].compactMap(\.self)
 
         for path in candidatePaths {
             guard FileManager.default.fileExists(atPath: path) else { continue }

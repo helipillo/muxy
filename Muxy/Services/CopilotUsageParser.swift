@@ -19,7 +19,10 @@ enum CopilotUsageParser {
                     let limit = AIUsageParserSupport.number(in: snapshot, keys: ["entitlement", "quota", "limit"])
                     let percentRemaining = AIUsageParserSupport.number(in: snapshot, keys: ["percent_remaining"])
                     let percentUsed = percentRemaining.map { max(0, min(100, 100 - $0)) }
-                    let detail = AIUsageParserSupport.usageDetail(used: limit.flatMap { total in remaining.map { total - $0 } }, limit: limit)
+                    let detail = AIUsageParserSupport.usageDetail(
+                        used: limit.flatMap { total in remaining.map { total - $0 } },
+                        limit: limit
+                    )
                     rows.append(
                         AIUsageMetricRow(
                             label: displayLabel(for: rawLabel),
@@ -37,7 +40,10 @@ enum CopilotUsageParser {
                     let limit = AIUsageParserSupport.number(in: snapshot, keys: ["entitlement", "quota", "limit"])
                     let percentRemaining = AIUsageParserSupport.number(in: snapshot, keys: ["percent_remaining"])
                     let percentUsed = percentRemaining.map { max(0, min(100, 100 - $0)) }
-                    let detail = AIUsageParserSupport.usageDetail(used: limit.flatMap { total in remaining.map { total - $0 } }, limit: limit)
+                    let detail = AIUsageParserSupport.usageDetail(
+                        used: limit.flatMap { total in remaining.map { total - $0 } },
+                        limit: limit
+                    )
                     rows.append(
                         AIUsageMetricRow(
                             label: displayLabel(for: rawLabel),
@@ -148,13 +154,13 @@ enum CopilotUsageParser {
     private static func displayLabel(for rawLabel: String) -> String {
         switch rawLabel.lowercased() {
         case "premium_interactions":
-            return "Premium"
+            "Premium"
         case "chat":
-            return "Chat"
+            "Chat"
         case "completions":
-            return "Completions"
+            "Completions"
         default:
-            return rawLabel.replacingOccurrences(of: "_", with: " ").capitalized
+            rawLabel.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
 }

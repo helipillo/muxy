@@ -1,8 +1,8 @@
 import Foundation
 
 enum ZaiUsageAPIClient {
-    private static let subscriptionURL = URL(string: "https://api.z.ai/api/biz/subscription/list")!
-    private static let quotaURL = URL(string: "https://api.z.ai/api/monitor/usage/quota/limit")!
+    private static let subscriptionURL: URL? = URL(string: "https://api.z.ai/api/biz/subscription/list")
+    private static let quotaURL: URL? = URL(string: "https://api.z.ai/api/monitor/usage/quota/limit")
 
     static func fetchSnapshot(for provider: AIProviderUsageDescriptor) async -> AIProviderUsageSnapshot {
         do {
@@ -12,9 +12,10 @@ enum ZaiUsageAPIClient {
                 "Accept": "application/json",
             ]
 
+            guard let subURL = subscriptionURL, let quotaURL else { throw ClaudeUsageError.missingAccessToken }
             let subscriptionData: Data?
             do {
-                let response = try await fetch(url: subscriptionURL, headers: headers)
+                let response = try await fetch(url: subURL, headers: headers)
                 if (200 ..< 300).contains(response.statusCode) {
                     subscriptionData = response.data
                 } else {

@@ -81,7 +81,7 @@ enum CodexUsageParser {
     private static func label(for window: [String: Any], fallback: String) -> String {
         if let seconds = AIUsageParserSupport.number(in: window, keys: ["limit_window_seconds"]) {
             switch Int(seconds) {
-            case 18_000: return "5h"
+            case 18000: return "5h"
             case 604_800: return fallback == "Reviews" ? "Reviews" : "7d"
             default: return fallback
             }

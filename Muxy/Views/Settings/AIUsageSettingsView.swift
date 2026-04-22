@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AIUsageSettingsView: View {
     @State private var usageService = AIUsageService.shared
+    @AppStorage(AIUsageSettingsStore.usageEnabledKey) private var usageEnabled = false
     @State private var usageDisplayMode = AIUsageSettingsStore.usageDisplayMode()
     @State private var autoRefreshInterval = AIUsageSettingsStore.autoRefreshInterval()
 
@@ -9,7 +10,63 @@ struct AIUsageSettingsView: View {
         AIUsageProviderCatalog.providers
     }
 
+    private let gridColumns: [GridItem] = [
+        GridItem(.flexible(minimum: 140), spacing: 12),
+        GridItem(.flexible(minimum: 140), spacing: 12),
+    ]
+
     var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Text("AI Usage")
+                    .font(.system(size: 12, weight: .medium))
+
+                Spacer()
+
+                Toggle("", isOn: $usageEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .scaleEffect(0.9)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
+
+            Divider().padding(.horizontal, 12)
+
+            if usageEnabled {
+                enabledSettings
+            } else {
+                disabledSettings
+            }
+
+            Spacer(minLength: 0)
+        }
+        .onChange(of: usageEnabled) { _, enabled in
+            AIUsageSettingsStore.setUsageEnabled(enabled)
+            if enabled {
+                refreshUsage()
+            }
+        }
+        .onChange(of: usageDisplayMode) { _, newValue in
+            AIUsageSettingsStore.setUsageDisplayMode(newValue)
+        }
+        .onChange(of: autoRefreshInterval) { _, newValue in
+            AIUsageSettingsStore.setAutoRefreshInterval(newValue)
+        }
+    }
+
+    private var disabledSettings: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Enable AI Usage to show the usage board in the sidebar.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+        }
+    }
+
+    private var enabledSettings: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text("Show")
@@ -56,7 +113,9 @@ struct AIUsageSettingsView: View {
                 Text("Choose which providers appear on the usage board.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
+
                 Spacer()
+
                 Button {
                     refreshUsage()
                 } label: {
@@ -72,56 +131,50 @@ struct AIUsageSettingsView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .onChange(of: usageDisplayMode) { _, newValue in
-                AIUsageSettingsStore.setUsageDisplayMode(newValue)
-            }
-            .onChange(of: autoRefreshInterval) { _, newValue in
-                AIUsageSettingsStore.setAutoRefreshInterval(newValue)
-            }
 
             Divider().padding(.horizontal, 12)
 
             ScrollView {
-                VStack(spacing: 0) {
+                LazyVGrid(columns: gridColumns, spacing: 8) {
                     ForEach(providers) { provider in
-                        providerRow(provider)
-                        Divider().padding(.leading, 12)
+                        providerCell(provider)
                     }
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
             }
-
-            Spacer(minLength: 0)
         }
     }
 
-    private func providerRow(_ provider: AIUsageProviderCatalogEntry) -> some View {
+    private func providerCell(_ provider: AIUsageProviderCatalogEntry) -> some View {
         HStack(spacing: 8) {
             Image(systemName: provider.iconName)
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
 
-            Text(provider.displayName)
-                .font(.system(size: 12))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(provider.displayName)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
 
-            if provider.hasNotificationIntegration {
-                Text("Integrated")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(.quaternary, in: Capsule())
+                if provider.hasNotificationIntegration {
+                    Text("Integrated")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
             Toggle("", isOn: providerToggleBinding(for: provider))
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .scaleEffect(0.9)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func providerToggleBinding(for provider: AIUsageProviderCatalogEntry) -> Binding<Bool> {

@@ -95,7 +95,8 @@ enum ZaiUsageParser {
         periodDuration: TimeInterval
     ) -> AIUsageMetricRow {
         let usedPercent = max(0, min(100, AIUsageParserSupport.number(in: limit, keys: ["percentage", "usedPercent", "used_percent"]) ?? 0))
-        let reset = AIUsageParserSupport.date(in: limit, keys: ["nextResetTime", "resetAt", "reset_at"]) ?? Date().addingTimeInterval(fallbackDuration)
+        let reset = AIUsageParserSupport.date(in: limit, keys: ["nextResetTime", "resetAt", "reset_at"]) ?? Date()
+            .addingTimeInterval(fallbackDuration)
         return AIUsageMetricRow(
             label: label,
             percent: usedPercent,

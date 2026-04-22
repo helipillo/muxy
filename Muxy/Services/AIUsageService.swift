@@ -276,7 +276,7 @@ enum AIUsageSnapshotComposer {
                     providerID: provider.providerID,
                     providerName: provider.providerName,
                     providerIconName: provider.providerIconName,
-                    state: .unavailable(message: "Usage disabled"),
+                    state: .unavailable(message: "No usage data"),
                     rows: []
                 )
             }
@@ -527,7 +527,7 @@ final class AIUsageService {
                 providerID: provider.id,
                 providerName: provider.displayName,
                 providerIconName: provider.iconName,
-                isEnabled: updatedPreferences.enabledByProviderID[provider.id] ?? false
+                isEnabled: updatedPreferences.enabledByProviderID[provider.id] ?? true
             )
         }
 

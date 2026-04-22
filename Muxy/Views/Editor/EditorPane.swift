@@ -133,6 +133,8 @@ struct EditorPane: View {
                     html: renderedMarkdownHTML,
                     filePath: state.filePath,
                     scrollPosition: $state.markdownScrollPosition,
+                    editorScrollY: state.markdownEditorScrollY,
+                    editorMaxScrollY: state.markdownEditorMaxScrollY,
                     scrollSyncEnabled: usesLinkedMarkdownScrolling,
                     showsVerticalScroller: !usesLinkedMarkdownScrolling,
                     hidesContentScrollbar: usesLinkedMarkdownScrolling,

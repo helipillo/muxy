@@ -73,6 +73,8 @@ final class EditorTabState: Identifiable {
     var backingStore: TextBackingStore?
     var markdownViewMode: EditorMarkdownViewMode = .code
     var markdownScrollPosition: CGFloat = 0
+    var markdownEditorScrollY: CGFloat = 0
+    var markdownEditorMaxScrollY: CGFloat = 0
     var markdownScrollSyncEnabled = true
     var markdownScrollDriver: EditorMarkdownScrollDriver = .editor
 

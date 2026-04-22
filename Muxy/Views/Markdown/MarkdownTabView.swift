@@ -73,6 +73,41 @@ private enum MarkdownWebBridge {
         })();
         """
     }
+
+    static func scrollToLinkedEditorPositionScript(
+        editorScrollY: CGFloat,
+        editorMaxScrollY: CGFloat,
+        progress: CGFloat
+    ) -> String {
+        let clampedEditorScrollY = max(editorScrollY, 0)
+        let clampedEditorMaxScrollY = max(editorMaxScrollY, 0)
+        let clampedProgress = min(max(progress, 0), 1)
+        return """
+        (() => {
+            const root = document.getElementById('content')
+                || document.scrollingElement
+                || document.documentElement
+                || document.body;
+            if (!root) return;
+            const previewMaxScrollY = Math.max(0, root.scrollHeight - root.clientHeight);
+            if (previewMaxScrollY <= 0) {
+                root.scrollTop = 0;
+                return;
+            }
+            const editorScrollY = \(clampedEditorScrollY);
+            const editorMaxScrollY = \(clampedEditorMaxScrollY);
+            const fallbackProgress = \(clampedProgress);
+            if (!Number.isFinite(editorScrollY) || !Number.isFinite(editorMaxScrollY) || editorMaxScrollY <= 0) {
+                root.scrollTop = previewMaxScrollY * fallbackProgress;
+                return;
+            }
+            const progress = Math.min(Math.max(editorScrollY / editorMaxScrollY, 0), 1);
+            const extraScrollY = Math.max(0, previewMaxScrollY - editorMaxScrollY);
+            const targetY = editorScrollY + Math.pow(progress, 2.2) * extraScrollY;
+            root.scrollTop = Math.min(Math.max(targetY, 0), previewMaxScrollY);
+        })();
+        """
+    }
 }
 
 struct MarkdownTabView: View {
@@ -241,6 +276,8 @@ struct MarkdownWebView: NSViewRepresentable {
         let showsVerticalScroller: Bool
         let hidesContentScrollbar: Bool
         let linkedScrollEnabled: Bool
+        let editorScrollY: CGFloat
+        let editorMaxScrollY: CGFloat
         let onScrollProgressChanged: ((CGFloat) -> Void)?
         let onLinkedScrollWheel: ((CGFloat) -> Void)?
     }
@@ -248,6 +285,8 @@ struct MarkdownWebView: NSViewRepresentable {
     let html: String
     let filePath: String?
     @Binding var scrollPosition: CGFloat
+    var editorScrollY: CGFloat = 0
+    var editorMaxScrollY: CGFloat = 0
     var scrollSyncEnabled = true
     var showsVerticalScroller = true
     var hidesContentScrollbar = false
@@ -261,6 +300,8 @@ struct MarkdownWebView: NSViewRepresentable {
             showsVerticalScroller: showsVerticalScroller,
             hidesContentScrollbar: hidesContentScrollbar,
             linkedScrollEnabled: linkedScrollEnabled,
+            editorScrollY: editorScrollY,
+            editorMaxScrollY: editorMaxScrollY,
             onScrollProgressChanged: onScrollProgressChanged,
             onLinkedScrollWheel: onLinkedScrollWheel
         )
@@ -279,7 +320,12 @@ struct MarkdownWebView: NSViewRepresentable {
         context.coordinator.configure(with: configuration)
         context.coordinator.updateScrollerVisibility(in: webView)
         if scrollSyncEnabled {
-            context.coordinator.applyScrollProgress(scrollPosition, to: webView)
+            context.coordinator.applyPreferredScroll(
+                progress: scrollPosition,
+                editorScrollY: editorScrollY,
+                editorMaxScrollY: editorMaxScrollY,
+                to: webView
+            )
         }
 
         context.coordinator.loadHTML(html, filePath: filePath, into: webView)
@@ -313,6 +359,8 @@ struct MarkdownWebView: NSViewRepresentable {
         private var lastScrollProgress: CGFloat = -1
         private var lastReportedScrollProgress: CGFloat = -1
         private var pendingScrollProgress: CGFloat?
+        private var pendingEditorScrollY: CGFloat?
+        private var pendingEditorMaxScrollY: CGFloat?
         private var activeNavigation: WKNavigation?
         private var loadCount: Int = 0
         private var currentFilePath: String?
@@ -321,6 +369,8 @@ struct MarkdownWebView: NSViewRepresentable {
         private var showsVerticalScroller = true
         private var hidesContentScrollbar = false
         private var linkedScrollEnabled = false
+        private var editorScrollY: CGFloat = 0
+        private var editorMaxScrollY: CGFloat = 0
         private var onScrollProgressChanged: ((CGFloat) -> Void)?
         private var onLinkedScrollWheel: ((CGFloat) -> Void)?
         private var isApplyingProgrammaticScroll = false
@@ -332,6 +382,8 @@ struct MarkdownWebView: NSViewRepresentable {
             showsVerticalScroller = configuration.showsVerticalScroller
             hidesContentScrollbar = configuration.hidesContentScrollbar
             linkedScrollEnabled = configuration.linkedScrollEnabled
+            editorScrollY = configuration.editorScrollY
+            editorMaxScrollY = configuration.editorMaxScrollY
             onScrollProgressChanged = configuration.onScrollProgressChanged
             onLinkedScrollWheel = configuration.onLinkedScrollWheel
         }
@@ -414,6 +466,8 @@ struct MarkdownWebView: NSViewRepresentable {
             if html != lastHTML {
                 lastHTML = html
                 pendingScrollProgress = scrollSyncEnabled ? scrollPosition : nil
+                pendingEditorScrollY = scrollSyncEnabled ? editorScrollY : nil
+                pendingEditorMaxScrollY = scrollSyncEnabled ? editorMaxScrollY : nil
                 lastScrollProgress = -1
                 loadCount += 1
                 isNavigationInFlight = true
@@ -429,7 +483,12 @@ struct MarkdownWebView: NSViewRepresentable {
                       syncWasJustEnabled || scrollPosition != lastScrollProgress,
                       scrollPosition >= 0
             {
-                applyScrollProgress(scrollPosition, to: webView)
+                applyPreferredScroll(
+                    progress: scrollPosition,
+                    editorScrollY: editorScrollY,
+                    editorMaxScrollY: editorMaxScrollY,
+                    to: webView
+                )
             }
         }
 
@@ -455,7 +514,16 @@ struct MarkdownWebView: NSViewRepresentable {
             isNavigationInFlight = false
             if let pending = pendingScrollProgress {
                 pendingScrollProgress = nil
-                applyScrollProgress(pending, to: webView)
+                let pendingEditorScrollY = pendingEditorScrollY
+                let pendingEditorMaxScrollY = pendingEditorMaxScrollY
+                self.pendingEditorScrollY = nil
+                self.pendingEditorMaxScrollY = nil
+                applyPreferredScroll(
+                    progress: pending,
+                    editorScrollY: pendingEditorScrollY ?? editorScrollY,
+                    editorMaxScrollY: pendingEditorMaxScrollY ?? editorMaxScrollY,
+                    to: webView
+                )
             }
             updateContentScrollbarVisibility(in: webView)
             collectJavaScriptErrors(from: webView)
@@ -555,6 +623,45 @@ struct MarkdownWebView: NSViewRepresentable {
 
                 self.lastScrollProgress = clampedProgress
             }
+        }
+
+        func applyPreferredScroll(
+            progress: CGFloat,
+            editorScrollY: CGFloat,
+            editorMaxScrollY: CGFloat,
+            to webView: WKWebView
+        ) {
+            guard progress >= 0 else { return }
+
+            let clampedProgress = min(max(progress, 0), 1)
+            if linkedScrollEnabled, editorMaxScrollY > 0 {
+                isApplyingProgrammaticScroll = true
+                programmaticScrollSuppressionUntil = Date().addingTimeInterval(Self.programmaticScrollSuppressionWindow)
+                let script = MarkdownWebBridge.scrollToLinkedEditorPositionScript(
+                    editorScrollY: editorScrollY,
+                    editorMaxScrollY: editorMaxScrollY,
+                    progress: clampedProgress
+                )
+                webView.evaluateJavaScript(script) { _, error in
+                    if let error {
+                        self.isApplyingProgrammaticScroll = false
+                        self.programmaticScrollSuppressionUntil = nil
+                        markdownWebLogger.error(
+                            """
+                            Failed applying linked markdown pixel scroll
+                            reason=\(error.localizedDescription, privacy: .public)
+                            """
+                        )
+                        self.applyScrollProgress(clampedProgress, to: webView)
+                        return
+                    }
+
+                    self.lastScrollProgress = clampedProgress
+                }
+                return
+            }
+
+            applyScrollProgress(clampedProgress, to: webView)
         }
 
         private func logNavigationFailure(kind: String, navigation: WKNavigation!, error: Error) {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AIUsageSettingsView: View {
-    @State private var usageService = AIUsageService.shared
+    private let usageService = AIUsageService.shared
     @AppStorage(AIUsageSettingsStore.usageEnabledKey) private var usageEnabled = false
     @AppStorage(AIUsageSettingsStore.showSecondaryLimitsKey) private var showSecondaryLimits = AIUsageSettingsStore
         .defaultShowSecondaryLimits

@@ -19,7 +19,13 @@ struct ZaiUsageProvider: AIUsageProvider {
                 "Accept": "application/json",
             ]
 
-            let subscriptionData: Data? = try? await Self.fetch(url: subscriptionURL, headers: headers).data
+            let subscriptionData: Data?
+            do {
+                subscriptionData = try await Self.fetch(url: subscriptionURL, headers: headers).data
+            } catch {
+                usageLogger.error("Z.ai subscription request failed: \(error.localizedDescription)")
+                subscriptionData = nil
+            }
             let quota = try await Self.fetch(url: quotaURL, headers: headers)
 
             if quota.statusCode == 401 || quota.statusCode == 403 {

@@ -1140,11 +1140,11 @@ struct CodeEditorView: NSViewRepresentable {
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
 
-        func updateMarkdownPreviewScrollProgress() {
+        func updateMarkdownPreviewScrollProgress(allowPreviewDriverTakeover: Bool = false) {
             guard state.isMarkdownFile,
                   state.markdownViewMode == .split,
                   state.markdownScrollSyncEnabled,
-                  state.markdownScrollDriver != .preview,
+                  state.markdownScrollDriver != .preview || allowPreviewDriverTakeover,
                   let scrollView
             else { return }
 
@@ -1153,6 +1153,20 @@ struct CodeEditorView: NSViewRepresentable {
             guard abs(state.markdownScrollPosition - progress) > 0.0005 else { return }
             state.markdownScrollDriver = .editor
             state.markdownScrollPosition = progress
+        }
+
+        private func publishMarkdownProgressIfEditorAutoScrolled(_ work: () -> Void) {
+            guard let scrollView else {
+                work()
+                return
+            }
+
+            let beforeY = scrollView.contentView.bounds.origin.y
+            work()
+            let afterY = scrollView.contentView.bounds.origin.y
+
+            guard abs(afterY - beforeY) > 0.5 else { return }
+            updateMarkdownPreviewScrollProgress(allowPreviewDriverTakeover: true)
         }
 
         private func markdownScrollProgress(for scrollView: NSScrollView) -> CGFloat {
@@ -1236,7 +1250,9 @@ struct CodeEditorView: NSViewRepresentable {
                 )
             }
 
-            scrollCursorVisibleInViewport(textView: textView, cursorLocation: cursorLocation)
+            publishMarkdownProgressIfEditorAutoScrolled {
+                scrollCursorVisibleInViewport(textView: textView, cursorLocation: cursorLocation)
+            }
 
             let scrollY = scrollView.contentView.bounds.origin.y
             let visibleHeight = scrollView.contentView.bounds.height
@@ -1255,7 +1271,9 @@ struct CodeEditorView: NSViewRepresentable {
                     let newCursor = newCharOffset + min(columnOffset, max(0, lineLength))
                     let safeCursor = min(newCursor, content.length)
                     textView.setSelectedRange(NSRange(location: safeCursor, length: 0))
-                    scrollCursorVisibleInViewport(textView: textView, cursorLocation: safeCursor)
+                    publishMarkdownProgressIfEditorAutoScrolled {
+                        scrollCursorVisibleInViewport(textView: textView, cursorLocation: safeCursor)
+                    }
                 }
             }
         }

@@ -451,6 +451,106 @@ private struct AIProviderUsageView: View {
 private struct AIUsageMetricRowView: View {
     let row: AIUsageMetricRow
 
+    @AppStorage(AIUsageSettingsStore.usageDisplayModeKey) private var usageDisplayModeRaw = AIUsageSettingsStore.defaultUsageDisplayMode.rawValue
+
+    private var usageDisplayMode: AIUsageDisplayMode {
+        AIUsageDisplayMode(rawValue: usageDisplayModeRaw) ?? AIUsageSettingsStore.defaultUsageDisplayMode
+    }
+
+    private var displayPercent: Double? {
+        guard let percent = row.percent else { return nil }
+        let clamped = max(0, min(100, percent))
+        switch usageDisplayMode {
+        case .used:
+            return clamped
+        case .remaining:
+            return max(0, min(100, 100 - clamped))
+        }
+    }
+
+    private var displayDetail: String? {
+        guard let detail = row.detail?.trimmingCharacters(in: .whitespacesAndNewlines), !detail.isEmpty else {
+            return nil
+        }
+
+        switch usageDisplayMode {
+        case .used:
+            if let converted = convertRemainingFractionToUsed(detail) {
+                return converted
+            }
+            if let converted = convertRemainingPercentToUsed(detail) {
+                return converted
+            }
+            return detail
+        case .remaining:
+            if let converted = convertUsedFractionToRemaining(detail) {
+                return converted
+            }
+            if let converted = convertUsedPercentToRemaining(detail) {
+                return converted
+            }
+            return detail
+        }
+    }
+
+    private func convertUsedFractionToRemaining(_ detail: String) -> String? {
+        guard let match = fractionMatch(from: detail), !match.isRemainingLabel else { return nil }
+        let remaining = max(0, match.total - match.left)
+        return "\(AIUsageParserSupport.formatNumber(remaining))/\(AIUsageParserSupport.formatNumber(match.total))"
+    }
+
+    private func convertRemainingFractionToUsed(_ detail: String) -> String? {
+        guard let match = fractionMatch(from: detail), match.isRemainingLabel else { return nil }
+        let used = max(0, match.total - match.left)
+        return "\(AIUsageParserSupport.formatNumber(used))/\(AIUsageParserSupport.formatNumber(match.total))"
+    }
+
+    private func convertUsedPercentToRemaining(_ detail: String) -> String? {
+        guard let used = percentMatch(from: detail, modeToken: "used") else { return nil }
+        let remaining = max(0, min(100, 100 - used))
+        return "\(AIUsageParserSupport.formatNumber(remaining))% left"
+    }
+
+    private func convertRemainingPercentToUsed(_ detail: String) -> String? {
+        guard let remaining = percentMatch(from: detail, modeToken: "left|remaining") else { return nil }
+        let used = max(0, min(100, 100 - remaining))
+        return "\(AIUsageParserSupport.formatNumber(used))% used"
+    }
+
+    private func fractionMatch(from detail: String) -> (left: Double, total: Double, isRemainingLabel: Bool)? {
+        let pattern = #"^\s*([0-9]+(?:\.[0-9]+)?)\s*/\s*([0-9]+(?:\.[0-9]+)?)(?:\s*(left|remaining))?\s*$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+        let range = NSRange(detail.startIndex ..< detail.endIndex, in: detail)
+        guard let match = regex.firstMatch(in: detail, options: [], range: range),
+              match.numberOfRanges >= 4,
+              let leftRange = Range(match.range(at: 1), in: detail),
+              let totalRange = Range(match.range(at: 2), in: detail),
+              let left = Double(detail[leftRange]),
+              let total = Double(detail[totalRange]),
+              total > 0
+        else {
+            return nil
+        }
+
+        let remainingRange = match.range(at: 3)
+        let isRemainingLabel = remainingRange.location != NSNotFound
+        return (left, total, isRemainingLabel)
+    }
+
+    private func percentMatch(from detail: String, modeToken: String) -> Double? {
+        let pattern = "^\\s*([0-9]+(?:\\.[0-9]+)?)%\\s*(?:" + modeToken + ")\\s*$"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+        let range = NSRange(detail.startIndex ..< detail.endIndex, in: detail)
+        guard let match = regex.firstMatch(in: detail, options: [], range: range),
+              match.numberOfRanges >= 2,
+              let valueRange = Range(match.range(at: 1), in: detail),
+              let value = Double(detail[valueRange])
+        else {
+            return nil
+        }
+        return value
+    }
+
     private static let resetFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .none
@@ -465,19 +565,19 @@ private struct AIUsageMetricRowView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(MuxyTheme.fgMuted)
                 Spacer()
-                if let percent = row.percent {
+                if let percent = displayPercent {
                     Text("\(Int(percent.rounded()))%")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(MuxyTheme.fg)
                 }
-                if let detail = row.detail {
+                if let detail = displayDetail {
                     Text(detail)
                         .font(.system(size: 9))
                         .foregroundStyle(MuxyTheme.fgDim)
                 }
             }
 
-            if let percent = row.percent {
+            if let percent = displayPercent {
                 ProgressView(value: percent, total: 100)
                     .tint(MuxyTheme.accent)
                     .controlSize(.mini)

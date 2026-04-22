@@ -144,16 +144,15 @@ enum MiniMaxUsageParser {
         let plan = explicitPlan ?? inferredPlan
 
         let scale = region == .cn ? (1 / modelCallsPerPrompt) : 1
-        let used = round(usedRaw * scale)
         let total = round(totalRaw * scale)
 
         let label = plan?.isEmpty == false ? "Session (\(plan!))" : "Session"
 
         return AIUsageMetricRow(
             label: label,
-            percent: AIUsageParserSupport.utilizationPercent(used: used, limit: total),
+            percent: AIUsageParserSupport.utilizationPercent(used: usedRaw * scale, limit: total),
             resetDate: resetDate,
-            detail: AIUsageParserSupport.usageDetail(used: used, limit: total)
+            detail: "\(AIUsageParserSupport.formatNumber(usedRaw * scale))/\(AIUsageParserSupport.formatNumber(total))"
         )
     }
 

@@ -271,6 +271,9 @@ struct SidebarFooter: View {
         .onReceive(NotificationCenter.default.publisher(for: .toggleNotificationPanel)) { _ in
             showNotifications.toggle()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleAIUsage)) { _ in
+            showAIUsagePopover.toggle()
+        }
     }
 
     private func postToggleSidebar() {
@@ -296,7 +299,7 @@ struct SidebarFooter: View {
     private var collapsedFooter: some View {
         VStack(spacing: 4) {
             IconButton(symbol: aiUsageIcon, accessibilityLabel: "AI Usage") { showAIUsagePopover.toggle() }
-                .help("AI Usage")
+                .help("AI Usage (\(KeyBindingStore.shared.combo(for: .toggleAIUsage).displayString))")
                 .popover(isPresented: $showAIUsagePopover) {
                     AIUsagePanel(
                         snapshots: usageService.snapshots,
@@ -327,7 +330,7 @@ struct SidebarFooter: View {
             Spacer()
 
             IconButton(symbol: aiUsageIcon, accessibilityLabel: "AI Usage") { showAIUsagePopover.toggle() }
-                .help("AI Usage")
+                .help("AI Usage (\(KeyBindingStore.shared.combo(for: .toggleAIUsage).displayString))")
                 .popover(isPresented: $showAIUsagePopover) {
                     AIUsagePanel(
                         snapshots: usageService.snapshots,
@@ -435,7 +438,7 @@ private struct AIProviderUsageView: View {
             case .available:
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(snapshot.rows) { row in
-                        AIUsageMetricRowView(row: row)
+                        AIUsageMetricRowView(row: row, fetchedAt: snapshot.fetchedAt)
                     }
                 }
             case let .unavailable(message),
@@ -450,6 +453,7 @@ private struct AIProviderUsageView: View {
 
 private struct AIUsageMetricRowView: View {
     let row: AIUsageMetricRow
+    let fetchedAt: Date
 
     @AppStorage(AIUsageSettingsStore.usageDisplayModeKey) private var usageDisplayModeRaw = AIUsageSettingsStore.defaultUsageDisplayMode.rawValue
 
@@ -457,15 +461,52 @@ private struct AIUsageMetricRowView: View {
         AIUsageDisplayMode(rawValue: usageDisplayModeRaw) ?? AIUsageSettingsStore.defaultUsageDisplayMode
     }
 
-    private var displayPercent: Double? {
-        guard let percent = row.percent else { return nil }
-        let clamped = max(0, min(100, percent))
+    private var paceResult: AIUsagePaceResult? {
+        guard let percentUsed = row.percent,
+              let resetsAt = row.resetDate,
+              let duration = row.periodDuration
+        else { return nil }
+
+        return AIUsagePaceCalculator.compute(
+            usedPercent: percentUsed,
+            resetsAt: resetsAt,
+            periodDuration: duration,
+            now: fetchedAt
+        )
+    }
+
+    private var paceIndicatorColor: Color {
+        guard let paceResult else { return .clear }
+        switch paceResult.status {
+        case .ahead:
+            return .green
+        case .onTrack:
+            return .yellow
+        case .behind:
+            return .red
+        }
+    }
+
+    private var paceTooltip: String? {
+        guard let paceResult else { return nil }
+
+        let secondLine: String
         switch usageDisplayMode {
         case .used:
-            return clamped
+            secondLine = "\(Int(paceResult.projectedUsedPercentAtReset))% used at reset"
         case .remaining:
-            return max(0, min(100, 100 - clamped))
+            secondLine = "\(Int(paceResult.projectedLeftPercentAtReset))% left at reset"
         }
+
+        if let eta = paceResult.runsOutIn {
+            return "\(paceResult.status.headline)\nRuns out in \(AIUsagePaceCalculator.formatDuration(eta))"
+        }
+
+        if let deficit = paceResult.deficitPercent, deficit > 0 {
+            return "\(paceResult.status.headline)\n\(Int(deficit))% in deficit"
+        }
+
+        return "\(paceResult.status.headline)\n\(secondLine)"
     }
 
     private var displayDetail: String? {
@@ -551,6 +592,16 @@ private struct AIUsageMetricRowView: View {
         return value
     }
 
+    private var displayPercent: Double? {
+        guard let percent = row.percent else { return nil }
+        let clamped = max(0, min(100, percent))
+        switch usageDisplayMode {
+        case .used:
+            return clamped
+        case .remaining:
+            return max(0, min(100, 100 - clamped))
+        }
+    }
     private static let resetFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .none
@@ -564,6 +615,13 @@ private struct AIUsageMetricRowView: View {
                 Text(row.label)
                     .font(.system(size: 10))
                     .foregroundStyle(MuxyTheme.fgMuted)
+
+                if let tooltip = paceTooltip {
+                    Circle()
+                        .fill(paceIndicatorColor)
+                        .frame(width: 5, height: 5)
+                        .help(tooltip)
+                }
                 Spacer()
                 if let percent = displayPercent {
                     Text("\(Int(percent.rounded()))%")

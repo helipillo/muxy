@@ -152,7 +152,8 @@ enum MiniMaxUsageParser {
             label: label,
             percent: AIUsageParserSupport.utilizationPercent(used: usedRaw * scale, limit: total),
             resetDate: resetDate,
-            detail: "\(AIUsageParserSupport.formatNumber(usedRaw * scale))/\(AIUsageParserSupport.formatNumber(total))"
+            detail: "\(AIUsageParserSupport.formatNumber(usedRaw * scale))/\(AIUsageParserSupport.formatNumber(total))",
+            periodDuration: codingPlanWindowMs / 1000
         )
     }
 

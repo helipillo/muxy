@@ -52,6 +52,7 @@ enum ShortcutAction: String, Codable, CaseIterable, Identifiable {
     case saveFile
     case toggleSidebar
     case toggleFileTree
+    case toggleAIUsage
 
     static let allCases: [Self] = [
         .newTab,
@@ -97,6 +98,7 @@ enum ShortcutAction: String, Codable, CaseIterable, Identifiable {
         .saveFile,
         .toggleSidebar,
         .toggleFileTree,
+        .toggleAIUsage,
     ]
 
     var id: String { rawValue }
@@ -143,6 +145,7 @@ enum ShortcutAction: String, Codable, CaseIterable, Identifiable {
         case .saveFile: ShortcutMetadata(displayName: "Save File", category: "Editor", scope: .mainWindow)
         case .toggleSidebar: ShortcutMetadata(displayName: "Toggle Sidebar", category: "App", scope: .mainWindow)
         case .toggleFileTree: ShortcutMetadata(displayName: "Toggle File Tree", category: "App", scope: .mainWindow)
+        case .toggleAIUsage: ShortcutMetadata(displayName: "Toggle AI Usage", category: "App", scope: .mainWindow)
         case .toggleThemePicker: ShortcutMetadata(displayName: "Theme Picker", category: "App", scope: .mainWindow)
         case .newProject: ShortcutMetadata(displayName: "New Project", category: "App", scope: .mainWindow)
         case .openProject: ShortcutMetadata(displayName: "Open Project", category: "App", scope: .mainWindow)
@@ -257,5 +260,6 @@ struct KeyBinding: Codable, Identifiable {
         Self(action: .saveFile, combo: KeyCombo(key: "s", command: true)),
         Self(action: .toggleSidebar, combo: KeyCombo(key: "b", command: true)),
         Self(action: .toggleFileTree, combo: KeyCombo(key: "e", command: true)),
+        Self(action: .toggleAIUsage, combo: KeyCombo(key: "l", command: true)),
     ]
 }

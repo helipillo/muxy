@@ -16,11 +16,11 @@ enum ZaiUsageParser {
         var rows: [AIUsageMetricRow] = []
 
         if let session = limit(limits: limits, type: "TOKENS_LIMIT", unit: 3) {
-            rows.append(percentRow(label: "Session", from: session, fallbackDuration: 5 * 60 * 60))
+            rows.append(percentRow(label: "Session", from: session, fallbackDuration: 5 * 60 * 60, periodDuration: 5 * 60 * 60))
         }
 
         if let weekly = limit(limits: limits, type: "TOKENS_LIMIT", unit: 6) {
-            rows.append(percentRow(label: "Weekly", from: weekly, fallbackDuration: 7 * 24 * 60 * 60))
+            rows.append(percentRow(label: "Weekly", from: weekly, fallbackDuration: 7 * 24 * 60 * 60, periodDuration: 7 * 24 * 60 * 60))
         }
 
         if let searches = limit(limits: limits, type: "TIME_LIMIT", unit: nil) {
@@ -32,7 +32,8 @@ enum ZaiUsageParser {
                     label: "Web searches",
                     percent: AIUsageParserSupport.utilizationPercent(used: used, limit: total),
                     resetDate: reset,
-                    detail: AIUsageParserSupport.usageDetail(used: used, limit: total)
+                    detail: AIUsageParserSupport.usageDetail(used: used, limit: total),
+                    periodDuration: 30 * 24 * 60 * 60
                 )
             )
         }
@@ -87,10 +88,21 @@ enum ZaiUsageParser {
         return nil
     }
 
-    private static func percentRow(label: String, from limit: [String: Any], fallbackDuration: TimeInterval) -> AIUsageMetricRow {
+    private static func percentRow(
+        label: String,
+        from limit: [String: Any],
+        fallbackDuration: TimeInterval,
+        periodDuration: TimeInterval
+    ) -> AIUsageMetricRow {
         let usedPercent = max(0, min(100, AIUsageParserSupport.number(in: limit, keys: ["percentage", "usedPercent", "used_percent"]) ?? 0))
         let reset = AIUsageParserSupport.date(in: limit, keys: ["nextResetTime", "resetAt", "reset_at"]) ?? Date().addingTimeInterval(fallbackDuration)
-        return AIUsageMetricRow(label: label, percent: usedPercent, resetDate: reset, detail: "\(AIUsageParserSupport.formatNumber(usedPercent))/100")
+        return AIUsageMetricRow(
+            label: label,
+            percent: usedPercent,
+            resetDate: reset,
+            detail: "\(AIUsageParserSupport.formatNumber(usedPercent))/100",
+            periodDuration: periodDuration
+        )
     }
 
     private static func nextUTCMonthStart() -> Date {

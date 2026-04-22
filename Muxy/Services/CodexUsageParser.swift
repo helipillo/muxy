@@ -64,6 +64,7 @@ enum CodexUsageParser {
     private static func rowForWindow(_ window: [String: Any], fallbackLabel: String) -> AIUsageMetricRow? {
         let usedPercent = AIUsageParserSupport.number(in: window, keys: ["used_percent"])
         let resetDate = AIUsageParserSupport.date(in: window, keys: ["reset_at"])
+        let periodDuration = AIUsageParserSupport.number(in: window, keys: ["limit_window_seconds"]).map { TimeInterval($0) }
         let label = label(for: window, fallback: fallbackLabel)
 
         guard usedPercent != nil || resetDate != nil else { return nil }
@@ -74,7 +75,7 @@ enum CodexUsageParser {
             nil
         }
 
-        return AIUsageMetricRow(label: label, percent: usedPercent, resetDate: resetDate, detail: detail)
+        return AIUsageMetricRow(label: label, percent: usedPercent, resetDate: resetDate, detail: detail, periodDuration: periodDuration)
     }
 
     private static func label(for window: [String: Any], fallback: String) -> String {

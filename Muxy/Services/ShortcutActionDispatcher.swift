@@ -134,6 +134,9 @@ struct ShortcutActionDispatcher {
         case .toggleFileTree:
             notificationCenter.post(name: .toggleFileTree, object: nil)
             return true
+        case .toggleAIUsage:
+            notificationCenter.post(name: .toggleAIUsage, object: nil)
+            return true
         case .selectTab1,
              .selectTab2,
              .selectTab3,

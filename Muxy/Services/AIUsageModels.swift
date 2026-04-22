@@ -6,13 +6,21 @@ struct AIUsageMetricRow: Identifiable, Equatable {
     let percent: Double?
     let resetDate: Date?
     let detail: String?
+    let periodDuration: TimeInterval?
 
-    init(label: String, percent: Double?, resetDate: Date?, detail: String?) {
+    init(
+        label: String,
+        percent: Double?,
+        resetDate: Date?,
+        detail: String?,
+        periodDuration: TimeInterval? = nil
+    ) {
         id = label
         self.label = label
         self.percent = percent
         self.resetDate = resetDate
         self.detail = detail
+        self.periodDuration = periodDuration
     }
 }
 

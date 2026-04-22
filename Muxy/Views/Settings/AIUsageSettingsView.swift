@@ -148,10 +148,7 @@ struct AIUsageSettingsView: View {
 
     private func providerCell(_ provider: AIUsageProviderCatalogEntry) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: provider.iconName)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
+            ProviderIconView(iconName: provider.iconName, size: 16)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(provider.displayName)

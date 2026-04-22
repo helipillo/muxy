@@ -303,19 +303,52 @@ struct SidebarFooter: View {
         usageService.isRefreshing ? "arrow.clockwise" : "sparkles"
     }
 
+    private var mostActiveProviderDisplay: (percent: Int, iconName: String)? {
+        guard let snapshot = usageService.mostActiveProviderSnapshot,
+              case .available = snapshot.state,
+              let percent = snapshot.rows.first?.percent
+        else { return nil }
+        return (Int(percent.rounded()), snapshot.providerIconName)
+    }
+
+    private var aiUsageButton: some View {
+        Button { showAIUsagePopover.toggle() } label: {
+            HStack(spacing: 3) {
+                if usageService.isRefreshing {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(MuxyTheme.fgMuted)
+                } else if let display = mostActiveProviderDisplay {
+                    ProviderIconView(iconName: display.iconName, size: 12)
+                        .opacity(0.7)
+                    Text("\(display.percent)%")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(MuxyTheme.fgMuted)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(MuxyTheme.fgMuted)
+                }
+            }
+            .frame(width: 24, height: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showAIUsagePopover) {
+            AIUsagePanel(
+                snapshots: usageService.snapshots,
+                isRefreshing: usageService.isRefreshing,
+                lastRefreshDate: usageService.lastRefreshDate,
+                onRefresh: refreshUsage
+            )
+        }
+        .help("AI Usage (\(KeyBindingStore.shared.combo(for: .toggleAIUsage).displayString))")
+    }
+
     private var collapsedFooter: some View {
         VStack(spacing: 4) {
             if usageEnabled {
-                IconButton(symbol: aiUsageIcon, accessibilityLabel: "AI Usage") { showAIUsagePopover.toggle() }
-                    .help("AI Usage (\(KeyBindingStore.shared.combo(for: .toggleAIUsage).displayString))")
-                    .popover(isPresented: $showAIUsagePopover) {
-                        AIUsagePanel(
-                            snapshots: usageService.snapshots,
-                            isRefreshing: usageService.isRefreshing,
-                            lastRefreshDate: usageService.lastRefreshDate,
-                            onRefresh: refreshUsage
-                        )
-                    }
+                aiUsageButton
             }
             IconButton(symbol: notificationBellIcon, accessibilityLabel: "Notifications") { showNotifications.toggle() }
                 .help("Notifications")
@@ -339,16 +372,7 @@ struct SidebarFooter: View {
             Spacer()
 
             if usageEnabled {
-                IconButton(symbol: aiUsageIcon, accessibilityLabel: "AI Usage") { showAIUsagePopover.toggle() }
-                    .help("AI Usage (\(KeyBindingStore.shared.combo(for: .toggleAIUsage).displayString))")
-                    .popover(isPresented: $showAIUsagePopover) {
-                        AIUsagePanel(
-                            snapshots: usageService.snapshots,
-                            isRefreshing: usageService.isRefreshing,
-                            lastRefreshDate: usageService.lastRefreshDate,
-                            onRefresh: refreshUsage
-                        )
-                    }
+                aiUsageButton
             }
             IconButton(symbol: notificationBellIcon, accessibilityLabel: "Notifications") { showNotifications.toggle() }
                 .help("Notifications")
@@ -382,12 +406,26 @@ private struct AIUsagePanel: View {
         return formatter
     }()
 
+    private var mostActiveSnapshotForPanel: AIProviderUsageSnapshot? {
+        snapshots
+            .filter { snapshot in
+                guard case .available = snapshot.state else { return false }
+                return snapshot.rows.contains { $0.percent != nil }
+            }
+            .max { $0.rows.first?.percent ?? 0 < $1.rows.first?.percent ?? 0 }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(MuxyTheme.fgMuted)
+                if let mostActive = mostActiveSnapshotForPanel {
+                    ProviderIconView(iconName: mostActive.providerIconName, size: 12)
+                        .opacity(0.7)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(MuxyTheme.fgMuted)
+                }
                 Text("AI Usage")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(MuxyTheme.fgMuted)
@@ -437,9 +475,8 @@ private struct AIProviderUsageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Image(systemName: snapshot.providerIconName)
-                    .font(.system(size: 9))
-                    .foregroundStyle(MuxyTheme.fgMuted)
+                ProviderIconView(iconName: snapshot.providerIconName, size: 14)
+                    .opacity(0.8)
                 Text(snapshot.providerName)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(MuxyTheme.fg)

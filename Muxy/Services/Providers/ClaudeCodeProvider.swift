@@ -4,7 +4,7 @@ struct ClaudeCodeProvider: AIProviderIntegration {
     let id = "claude"
     let displayName = "Claude Code"
     let socketTypeKey = "claude_hook"
-    let iconName = "sparkles"
+    let iconName = "claude"
     let executableNames = ["claude"]
 
     private static let settingsPath = NSHomeDirectory() + "/.claude/settings.json"

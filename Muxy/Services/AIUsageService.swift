@@ -240,26 +240,21 @@ enum AIUsageProviderCatalog {
     }
 
     private static let bundledSeedProviders: [AIUsageProviderCatalogEntry] = [
-        .init(id: "codex", displayName: "Codex", iconName: "sparkles", source: .bundled),
-        .init(id: "copilot", displayName: "Copilot", iconName: "sparkles", source: .bundled),
-        .init(id: "cursor", displayName: "Cursor", iconName: "sparkles", source: .bundled),
-        .init(id: "gemini", displayName: "Gemini", iconName: "sparkles", source: .bundled),
-        .init(id: "minimax", displayName: "MiniMax", iconName: "sparkles", source: .bundled),
-        .init(id: "opencode-go", displayName: "OpenCode Go", iconName: "sparkles", source: .bundled),
-        .init(id: "windsurf", displayName: "Windsurf", iconName: "sparkles", source: .bundled),
-        .init(id: "kimi", displayName: "Kimi", iconName: "sparkles", source: .bundled),
-        .init(id: "kiro", displayName: "Kiro", iconName: "sparkles", source: .bundled),
-        .init(id: "antigravity", displayName: "Antigravity", iconName: "sparkles", source: .bundled),
-        .init(id: "amp", displayName: "Amp", iconName: "sparkles", source: .bundled),
-        .init(id: "factory", displayName: "Factory", iconName: "sparkles", source: .bundled),
-        .init(
-            id: "jetbrains-ai-assistant",
-            displayName: "JetBrains AI Assistant",
-            iconName: "sparkles",
-            source: .bundled
-        ),
-        .init(id: "zai", displayName: "Z.ai", iconName: "sparkles", source: .bundled),
-        .init(id: "perplexity", displayName: "Perplexity", iconName: "sparkles", source: .bundled),
+        .init(id: "codex", displayName: "Codex", iconName: "codex", source: .bundled),
+        .init(id: "copilot", displayName: "Copilot", iconName: "copilot", source: .bundled),
+        .init(id: "cursor", displayName: "Cursor", iconName: "cursor", source: .bundled),
+        .init(id: "gemini", displayName: "Gemini", iconName: "gemini", source: .bundled),
+        .init(id: "minimax", displayName: "MiniMax", iconName: "minimax", source: .bundled),
+        .init(id: "opencode-go", displayName: "OpenCode Go", iconName: "opencode-go", source: .bundled),
+        .init(id: "windsurf", displayName: "Windsurf", iconName: "windsurf", source: .bundled),
+        .init(id: "kimi", displayName: "Kimi", iconName: "kimi", source: .bundled),
+        .init(id: "kiro", displayName: "Kiro", iconName: "kiro", source: .bundled),
+        .init(id: "antigravity", displayName: "Antigravity", iconName: "antigravity", source: .bundled),
+        .init(id: "amp", displayName: "Amp", iconName: "amp", source: .bundled),
+        .init(id: "factory", displayName: "Factory", iconName: "factory", source: .bundled),
+        .init(id: "jetbrains-ai-assistant", displayName: "JetBrains AI Assistant", iconName: "jetbrains-ai-assistant", source: .bundled),
+        .init(id: "zai", displayName: "Z.ai", iconName: "zai", source: .bundled),
+        .init(id: "perplexity", displayName: "Perplexity", iconName: "perplexity", source: .bundled),
     ]
 
     static func canonicalID(for providerID: String) -> String {
@@ -343,6 +338,35 @@ final class AIUsageService {
 
     @ObservationIgnored private var refreshTask: Task<[AIProviderUsageSnapshot], Never>?
     @ObservationIgnored private var fetchedSnapshotsCache: [AIProviderUsageSnapshot] = []
+    @ObservationIgnored private var previousSnapshotsCache: [AIProviderUsageSnapshot] = []
+
+    var mostActiveProviderSnapshot: AIProviderUsageSnapshot? {
+        guard !previousSnapshotsCache.isEmpty, !snapshots.isEmpty else { return nil }
+
+        var maxMovement: Double = 0
+        var mostActive: AIProviderUsageSnapshot?
+
+        for current in snapshots {
+            guard case .available = current.state else { continue }
+            guard let currentPercent = current.rows.first?.percent else { continue }
+
+            if let previous = previousSnapshotsCache.first(where: { $0.providerID == current.providerID }),
+               case .available = previous.state,
+               let previousPercent = previous.rows.first?.percent
+            {
+                let movement = abs(currentPercent - previousPercent)
+                if movement > maxMovement {
+                    maxMovement = movement
+                    mostActive = current
+                }
+            } else if currentPercent > maxMovement {
+                maxMovement = currentPercent
+                mostActive = current
+            }
+        }
+
+        return mostActive
+    }
 
     private init() {}
 
@@ -434,6 +458,7 @@ final class AIUsageService {
         let fetchedSnapshots = await task.value
         AIUsageAutoTracking.autoTrackProvidersWithAvailableUsage(snapshots: fetchedSnapshots)
 
+        previousSnapshotsCache = snapshots
         fetchedSnapshotsCache = fetchedSnapshots
         let composedSnapshots = composeSnapshots(
             catalogProviders: catalogProviders,

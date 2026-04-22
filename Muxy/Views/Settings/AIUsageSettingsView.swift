@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AIUsageSettingsView: View {
     @State private var usageService = AIUsageService.shared
+    @State private var usageDisplayMode = AIUsageSettingsStore.usageDisplayMode()
     @State private var autoRefreshInterval = AIUsageSettingsStore.autoRefreshInterval()
 
     private var providers: [AIUsageProviderCatalogEntry] {
@@ -10,6 +11,26 @@ struct AIUsageSettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Text("Show")
+                    .font(.system(size: 12, weight: .medium))
+
+                Spacer()
+
+                Picker("Show", selection: $usageDisplayMode) {
+                    ForEach(AIUsageDisplayMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 180)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
+
+            Divider().padding(.horizontal, 12)
+
             HStack(spacing: 8) {
                 Text("Auto Refresh")
                     .font(.system(size: 12, weight: .medium))
@@ -51,6 +72,9 @@ struct AIUsageSettingsView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .onChange(of: usageDisplayMode) { _, newValue in
+                AIUsageSettingsStore.setUsageDisplayMode(newValue)
+            }
             .onChange(of: autoRefreshInterval) { _, newValue in
                 AIUsageSettingsStore.setAutoRefreshInterval(newValue)
             }
@@ -80,12 +104,14 @@ struct AIUsageSettingsView: View {
             Text(provider.displayName)
                 .font(.system(size: 12))
 
-            Text(provider.isNative ? "Native" : "Bridge")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(.quaternary, in: Capsule())
+            if provider.hasNotificationIntegration {
+                Text("Integrated")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.quaternary, in: Capsule())
+            }
 
             Spacer()
 

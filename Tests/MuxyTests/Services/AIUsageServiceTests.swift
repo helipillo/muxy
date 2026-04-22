@@ -84,9 +84,9 @@ struct AIUsageServiceTests {
         #expect(!AIUsageProviderTrackingStore.isTracked(providerID: providerID, defaults: defaults))
     }
 
-    @Test("non-native enabled defaults to true and persists updates")
-    func nonNativeEnabledPersistence() {
-        let suiteName = "AIUsageServiceTests.NonNativeEnabled.\(UUID().uuidString)"
+    @Test("provider enabled defaults to true and persists updates")
+    func providerEnabledPersistence() {
+        let suiteName = "AIUsageServiceTests.ProviderEnabled.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             Issue.record("Unable to create isolated UserDefaults suite")
             return
@@ -139,8 +139,6 @@ struct AIUsageServiceTests {
         #expect(AIUsageAutoRefreshInterval.oneHour.label == "1h")
     }
 
-
-
     @Test("tracking preferences canonicalize legacy provider IDs")
     func trackingCanonicalizesLegacyProviderIDs() {
         let suiteName = "AIUsageServiceTests.CanonicalTracking.\(UUID().uuidString)"
@@ -156,40 +154,15 @@ struct AIUsageServiceTests {
         #expect(AIUsageProviderTrackingStore.hasTrackedPreference(providerID: "claude", defaults: defaults))
     }
 
-    @Test("snapshot merger deduplicates canonical provider IDs")
-    func snapshotMergerDeduplicatesCanonicalProviderIDs() {
-        let nativeSnapshots = [
-            AIProviderUsageSnapshot(
-                providerID: "claude",
-                providerName: "Claude",
-                providerIconName: "sparkles",
-                state: .available,
-                rows: [AIUsageMetricRow(label: "5h", percent: 25, resetDate: nil, detail: "25/100")]
-            ),
-        ]
-
-        let openUsageSnapshots = [
-            AIProviderUsageSnapshot(
-                providerID: "claude_code",
-                providerName: "Claude Code",
-                providerIconName: "sparkles",
-                state: .available,
-                rows: [AIUsageMetricRow(label: "Monthly", percent: 50, resetDate: nil, detail: "50/100")]
-            ),
-        ]
-
-        let merged = AIUsageSnapshotMerger.merge(
-            nativeSnapshots: nativeSnapshots,
-            openUsageSnapshots: openUsageSnapshots
-        )
-
-        #expect(merged.count == 1)
-        #expect(merged[0].providerID == "claude")
+    @MainActor
+    @Test("catalog canonical ID normalizes legacy provider IDs")
+    func catalogCanonicalizesLegacyProviderIDs() {
+        #expect(AIUsageProviderCatalog.canonicalID(for: "claude_code") == "claude")
+        #expect(AIUsageProviderCatalog.canonicalID(for: "cursor") == "cursor")
     }
 
-
-    @Test("compose snapshots includes tracked disabled non-native providers with Disabled state")
-    func composeSnapshotsIncludesDisabledNonNativeProviderState() {
+    @Test("compose snapshots includes tracked disabled providers with Disabled state")
+    func composeSnapshotsIncludesDisabledProviderState() {
         let trackedProviders = [
             AITrackedProviderUsageDescriptor(
                 providerID: "cursor",
@@ -232,71 +205,12 @@ struct AIUsageServiceTests {
         }
     }
 
-    @Test("OpenUsage snapshot mapping supports progress, text, and badge lines")
-    func openUsageSnapshotMapping() throws {
-        let payload = """
-        [
-          {
-            "provider": "cursor",
-            "providerName": "Cursor",
-            "lines": [
-              {
-                "type": "progress",
-                "label": "Monthly",
-                "used": 48,
-                "limit": 100,
-                "resetsAt": "2026-05-01T00:00:00Z"
-              },
-              {
-                "type": "text",
-                "label": "Plan",
-                "value": "Pro"
-              },
-              {
-                "type": "badge",
-                "label": "Status",
-                "subtitle": "Healthy"
-              }
-            ]
-          }
-        ]
-        """
-
-        let data = try #require(payload.data(using: .utf8))
-        let catalogByProviderID: [String: AIUsageProviderCatalogEntry] = [
-            "cursor": AIUsageProviderCatalogEntry(
-                id: "cursor",
-                displayName: "Cursor",
-                iconName: "sparkles",
-                source: .openUsage
-            ),
-        ]
-
-        let snapshots = try OpenUsageAPIClient.parseSnapshots(
-            from: data,
-            catalogByProviderID: catalogByProviderID
-        )
-
-        #expect(snapshots.count == 1)
-        let snapshot = try #require(snapshots.first)
-        #expect(snapshot.providerID == "cursor")
-        #expect(snapshot.state == .available)
-        #expect(snapshot.rows.count == 3)
-
-        let progressRow = snapshot.rows[0]
-        #expect(progressRow.label == "Monthly")
-        #expect(progressRow.percent == 48)
-        #expect(progressRow.detail == "48/100")
-        #expect(progressRow.resetDate != nil)
-
-        let textRow = snapshot.rows[1]
-        #expect(textRow.label == "Plan")
-        #expect(textRow.percent == nil)
-        #expect(textRow.detail == "Pro")
-
-        let badgeRow = snapshot.rows[2]
-        #expect(badgeRow.label == "Status")
-        #expect(badgeRow.percent == nil)
-        #expect(badgeRow.detail == "Healthy")
+    @MainActor
+    @Test("bundled provider catalog metadata is exposed for usage-only providers")
+    func bundledProviderCatalogMetadata() {
+        let entry = AIUsageProviderCatalog.entry(providerID: "cursor")
+        #expect(entry?.displayName == "Cursor")
+        #expect(entry?.hasNotificationIntegration == false)
+        #expect(entry?.isBundled == true)
     }
 }

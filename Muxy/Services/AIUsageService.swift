@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let usageLogger = Logger(subsystem: "app.muxy", category: "AIUsageService")
+let usageLogger = Logger(subsystem: "app.muxy", category: "AIUsageService")
 
 private func canonicalAIUsageProviderID(_ providerID: String) -> String {
     let normalized = providerID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -82,19 +82,28 @@ enum AIUsageProviderEnabledStore {
     }
 }
 
+enum AIUsageDisplayMode: String, CaseIterable, Identifiable {
+    case used
+    case remaining
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .used:
+            "Used"
+        case .remaining:
+            "Remaining"
+        }
+    }
+}
+
 enum AIUsageSettingsStore {
-    static let openUsageBridgeEnabledKey = "muxy.usage.openusageBridgeEnabled"
     static let autoRefreshIntervalKey = "muxy.usage.autoRefreshIntervalSeconds"
+    static let usageDisplayModeKey = "muxy.usage.displayMode"
 
     static let defaultAutoRefreshInterval: AIUsageAutoRefreshInterval = .fiveMinutes
-
-    static func isOpenUsageBridgeEnabled(defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: openUsageBridgeEnabledKey, fallback: true)
-    }
-
-    static func setOpenUsageBridgeEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
-        defaults.set(enabled, forKey: openUsageBridgeEnabledKey)
-    }
+    static let defaultUsageDisplayMode: AIUsageDisplayMode = .used
 
     static func autoRefreshInterval(defaults: UserDefaults = .standard) -> AIUsageAutoRefreshInterval {
         guard defaults.object(forKey: autoRefreshIntervalKey) != nil else {
@@ -107,6 +116,19 @@ enum AIUsageSettingsStore {
 
     static func setAutoRefreshInterval(_ interval: AIUsageAutoRefreshInterval, defaults: UserDefaults = .standard) {
         defaults.set(interval.rawValue, forKey: autoRefreshIntervalKey)
+    }
+
+    static func usageDisplayMode(defaults: UserDefaults = .standard) -> AIUsageDisplayMode {
+        guard let raw = defaults.string(forKey: usageDisplayModeKey),
+              let mode = AIUsageDisplayMode(rawValue: raw)
+        else {
+            return defaultUsageDisplayMode
+        }
+        return mode
+    }
+
+    static func setUsageDisplayMode(_ mode: AIUsageDisplayMode, defaults: UserDefaults = .standard) {
+        defaults.set(mode.rawValue, forKey: usageDisplayModeKey)
     }
 }
 
@@ -137,8 +159,8 @@ enum AIUsageAutoRefreshInterval: Int, CaseIterable, Identifiable {
 }
 
 enum AIUsageProviderCatalogSource {
-    case native
-    case openUsage
+    case notificationIntegration
+    case bundled
 }
 
 struct AIUsageProviderCatalogEntry: Identifiable, Equatable {
@@ -147,33 +169,33 @@ struct AIUsageProviderCatalogEntry: Identifiable, Equatable {
     let iconName: String
     let source: AIUsageProviderCatalogSource
 
-    var isNative: Bool { source == .native }
-    var isOpenUsageCatalog: Bool { source == .openUsage }
+    var hasNotificationIntegration: Bool { source == .notificationIntegration }
+    var isBundled: Bool { source == .bundled }
 }
 
 @MainActor
 enum AIUsageProviderCatalog {
     static let providers: [AIUsageProviderCatalogEntry] = {
-        let native = AIProviderRegistry.shared.providers.map {
+        let notificationProviders = AIProviderRegistry.shared.providers.map {
             AIUsageProviderCatalogEntry(
                 id: canonicalAIUsageProviderID($0.id),
                 displayName: $0.displayName,
                 iconName: $0.iconName,
-                source: .native
+                source: .notificationIntegration
             )
         }
 
-        var byID = Dictionary(uniqueKeysWithValues: native.map { ($0.id, $0) })
-        for provider in openUsageSeedProviders where byID[provider.id] == nil {
+        var byID = Dictionary(uniqueKeysWithValues: notificationProviders.map { ($0.id, $0) })
+        for provider in bundledSeedProviders where byID[provider.id] == nil {
             byID[provider.id] = provider
         }
 
-        let nativeIDs = Set(native.map(\.id))
+        let notificationProviderIDs = Set(notificationProviders.map(\.id))
         return byID.values.sorted { lhs, rhs in
-            let lhsNative = nativeIDs.contains(lhs.id)
-            let rhsNative = nativeIDs.contains(rhs.id)
-            if lhsNative != rhsNative {
-                return lhsNative
+            let lhsIntegrated = notificationProviderIDs.contains(lhs.id)
+            let rhsIntegrated = notificationProviderIDs.contains(rhs.id)
+            if lhsIntegrated != rhsIntegrated {
+                return lhsIntegrated
             }
             return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
         }
@@ -182,45 +204,41 @@ enum AIUsageProviderCatalog {
     private static let providerByID: [String: AIUsageProviderCatalogEntry] =
         Dictionary(uniqueKeysWithValues: providers.map { (canonicalAIUsageProviderID($0.id), $0) })
 
-    private static let nativeProviderByID: [String: any AIProviderIntegration] =
+    private static let notificationProviderByID: [String: any AIProviderIntegration] =
         Dictionary(uniqueKeysWithValues: AIProviderRegistry.shared.providers.map { (canonicalAIUsageProviderID($0.id), $0) })
 
     static func entry(providerID: String) -> AIUsageProviderCatalogEntry? {
         providerByID[canonicalAIUsageProviderID(providerID)]
     }
 
-    static func isNativeProvider(providerID: String) -> Bool {
-        nativeProviderByID[canonicalAIUsageProviderID(providerID)] != nil
+    static func notificationProvider(providerID: String) -> (any AIProviderIntegration)? {
+        notificationProviderByID[canonicalAIUsageProviderID(providerID)]
     }
 
-    static func nativeProvider(providerID: String) -> (any AIProviderIntegration)? {
-        nativeProviderByID[canonicalAIUsageProviderID(providerID)]
-    }
-
-    private static let openUsageSeedProviders: [AIUsageProviderCatalogEntry] = [
-        .init(id: "codex", displayName: "Codex", iconName: "sparkles", source: .openUsage),
-        .init(id: "copilot", displayName: "Copilot", iconName: "sparkles", source: .openUsage),
-        .init(id: "cursor", displayName: "Cursor", iconName: "sparkles", source: .openUsage),
-        .init(id: "gemini", displayName: "Gemini", iconName: "sparkles", source: .openUsage),
-        .init(id: "minimax", displayName: "MiniMax", iconName: "sparkles", source: .openUsage),
-        .init(id: "opencode-go", displayName: "OpenCode Go", iconName: "sparkles", source: .openUsage),
-        .init(id: "windsurf", displayName: "Windsurf", iconName: "sparkles", source: .openUsage),
-        .init(id: "kimi", displayName: "Kimi", iconName: "sparkles", source: .openUsage),
-        .init(id: "kiro", displayName: "Kiro", iconName: "sparkles", source: .openUsage),
-        .init(id: "antigravity", displayName: "Antigravity", iconName: "sparkles", source: .openUsage),
-        .init(id: "amp", displayName: "Amp", iconName: "sparkles", source: .openUsage),
-        .init(id: "factory", displayName: "Factory", iconName: "sparkles", source: .openUsage),
+    private static let bundledSeedProviders: [AIUsageProviderCatalogEntry] = [
+        .init(id: "codex", displayName: "Codex", iconName: "sparkles", source: .bundled),
+        .init(id: "copilot", displayName: "Copilot", iconName: "sparkles", source: .bundled),
+        .init(id: "cursor", displayName: "Cursor", iconName: "sparkles", source: .bundled),
+        .init(id: "gemini", displayName: "Gemini", iconName: "sparkles", source: .bundled),
+        .init(id: "minimax", displayName: "MiniMax", iconName: "sparkles", source: .bundled),
+        .init(id: "opencode-go", displayName: "OpenCode Go", iconName: "sparkles", source: .bundled),
+        .init(id: "windsurf", displayName: "Windsurf", iconName: "sparkles", source: .bundled),
+        .init(id: "kimi", displayName: "Kimi", iconName: "sparkles", source: .bundled),
+        .init(id: "kiro", displayName: "Kiro", iconName: "sparkles", source: .bundled),
+        .init(id: "antigravity", displayName: "Antigravity", iconName: "sparkles", source: .bundled),
+        .init(id: "amp", displayName: "Amp", iconName: "sparkles", source: .bundled),
+        .init(id: "factory", displayName: "Factory", iconName: "sparkles", source: .bundled),
         .init(
             id: "jetbrains-ai-assistant",
             displayName: "JetBrains AI Assistant",
             iconName: "sparkles",
-            source: .openUsage
+            source: .bundled
         ),
-        .init(id: "zai", displayName: "Z.ai", iconName: "sparkles", source: .openUsage),
-        .init(id: "perplexity", displayName: "Perplexity", iconName: "sparkles", source: .openUsage),
+        .init(id: "zai", displayName: "Z.ai", iconName: "sparkles", source: .bundled),
+        .init(id: "perplexity", displayName: "Perplexity", iconName: "sparkles", source: .bundled),
     ]
 
-    static func canonicalID(for providerID: String, source _: AIUsageProviderCatalogSource) -> String {
+    static func canonicalID(for providerID: String) -> String {
         canonicalAIUsageProviderID(providerID)
     }
 }
@@ -264,9 +282,24 @@ enum AIUsageSnapshotMerger {
         nativeSnapshots: [AIProviderUsageSnapshot],
         openUsageSnapshots: [AIProviderUsageSnapshot]
     ) -> [AIProviderUsageSnapshot] {
-        let nativeIDs = Set(nativeSnapshots.map { canonicalAIUsageProviderID($0.providerID) })
-        let filteredOpenUsage = openUsageSnapshots.filter { !nativeIDs.contains(canonicalAIUsageProviderID($0.providerID)) }
-        return nativeSnapshots + filteredOpenUsage
+        var byID = Dictionary(uniqueKeysWithValues: nativeSnapshots.map { (canonicalAIUsageProviderID($0.providerID), $0) })
+
+        for snapshot in openUsageSnapshots {
+            let key = canonicalAIUsageProviderID(snapshot.providerID)
+            guard let existing = byID[key] else {
+                byID[key] = snapshot
+                continue
+            }
+
+            switch existing.state {
+            case .available:
+                continue
+            case .unavailable, .error:
+                byID[key] = snapshot
+            }
+        }
+
+        return Array(byID.values)
     }
 }
 
@@ -307,8 +340,8 @@ final class AIUsageService {
                     trackedProviderIDs.insert(providerID)
                 }
 
-                if provider.isNative {
-                    enabledByProviderID[providerID] = AIUsageProviderCatalog.nativeProvider(providerID: providerID)?.isEnabled ?? false
+                if provider.hasNotificationIntegration {
+                    enabledByProviderID[providerID] = AIUsageProviderCatalog.notificationProvider(providerID: providerID)?.isEnabled ?? false
                 } else {
                     enabledByProviderID[providerID] = AIUsageProviderEnabledStore.isEnabled(providerID: providerID, defaults: defaults)
                 }
@@ -343,8 +376,8 @@ final class AIUsageService {
         let catalogProviders = AIUsageProviderCatalog.providers
         let preferences = ProviderRuntimePreferences(catalogProviders: catalogProviders)
 
-        let nativeEnabledDescriptors = catalogProviders.compactMap { provider -> AIProviderUsageDescriptor? in
-            guard provider.isNative, preferences.enabledByProviderID[provider.id] == true else { return nil }
+        let enabledProviderDescriptors = catalogProviders.compactMap { provider -> AIProviderUsageDescriptor? in
+            guard preferences.enabledByProviderID[provider.id] == true else { return nil }
             return AIProviderUsageDescriptor(
                 providerID: provider.id,
                 providerName: provider.displayName,
@@ -352,8 +385,9 @@ final class AIUsageService {
             )
         }
 
-        let catalogByProviderID = Dictionary(uniqueKeysWithValues: catalogProviders.map { ($0.id, $0) })
-        let bridgeEnabled = AIUsageSettingsStore.isOpenUsageBridgeEnabled()
+        let nativeProviderDescriptors = enabledProviderDescriptors.filter {
+            AIUsageFetcher.supportsNativeCollector(providerID: $0.providerID)
+        }
 
         isRefreshing = true
         defer {
@@ -361,17 +395,16 @@ final class AIUsageService {
             refreshTask = nil
         }
 
-        let task = Task { [nativeEnabledDescriptors, catalogByProviderID, bridgeEnabled] in
-            async let nativeSnapshots = AIUsageFetcher.fetchSnapshots(for: nativeEnabledDescriptors)
-            async let openUsageSnapshots = fetchOpenUsageSnapshotsIfEnabled(
-                bridgeEnabled: bridgeEnabled,
-                catalogByProviderID: catalogByProviderID
+        let task = Task { [nativeProviderDescriptors, enabledProviderDescriptors] in
+            async let nativeSnapshots = AIUsageFetcher.fetchSnapshots(for: nativeProviderDescriptors)
+            async let openUsageSnapshots = OpenUsageAPIClient.fetchSnapshots(for: enabledProviderDescriptors)
+
+            let mergedSnapshots = AIUsageSnapshotMerger.merge(
+                nativeSnapshots: await nativeSnapshots,
+                openUsageSnapshots: await openUsageSnapshots
             )
 
-            return await AIUsageSnapshotMerger.merge(
-                nativeSnapshots: nativeSnapshots,
-                openUsageSnapshots: openUsageSnapshots
-            )
+            return mergedSnapshots
         }
 
         refreshTask = task
@@ -428,17 +461,18 @@ final class AIUsageService {
             fetchedSnapshots: fetchedSnapshots
         )
     }
-
-    private func fetchOpenUsageSnapshotsIfEnabled(
-        bridgeEnabled: Bool,
-        catalogByProviderID: [String: AIUsageProviderCatalogEntry]
-    ) async -> [AIProviderUsageSnapshot] {
-        guard bridgeEnabled else { return [] }
-        return await OpenUsageAPIClient.fetchSnapshots(catalogByProviderID: catalogByProviderID)
-    }
 }
 
 enum AIUsageFetcher {
+    static func supportsNativeCollector(providerID: String) -> Bool {
+        switch canonicalAIUsageProviderID(providerID) {
+        case "claude", "codex", "copilot", "minimax", "cursor", "amp", "zai":
+            return true
+        default:
+            return false
+        }
+    }
+
     static func fetchSnapshots(for providers: [AIProviderUsageDescriptor]) async -> [AIProviderUsageSnapshot] {
         await withTaskGroup(of: (Int, AIProviderUsageSnapshot).self) { group in
             for (index, provider) in providers.enumerated() {
@@ -464,12 +498,32 @@ enum AIUsageFetcher {
         switch provider.providerID {
         case "claude":
             await ClaudeUsageAPIClient.fetchSnapshot(for: provider)
+        case "codex":
+            await CodexUsageAPIClient.fetchSnapshot(for: provider)
+        case "copilot":
+            await CopilotUsageAPIClient.fetchSnapshot(for: provider)
+        case "minimax":
+            await MiniMaxUsageAPIClient.fetchSnapshot(for: provider)
+        case "cursor":
+            await CursorUsageAPIClient.fetchSnapshot(for: provider)
+        case "amp":
+            await AmpUsageAPIClient.fetchSnapshot(for: provider)
+        case "zai":
+            await ZaiUsageAPIClient.fetchSnapshot(for: provider)
         case "opencode":
             AIProviderUsageSnapshot(
                 providerID: provider.providerID,
                 providerName: provider.providerName,
                 providerIconName: provider.providerIconName,
                 state: .unavailable(message: "Usage unavailable"),
+                rows: []
+            )
+        case "gemini", "opencode-go", "windsurf", "kimi", "kiro", "antigravity", "factory", "jetbrains-ai-assistant", "perplexity":
+            AIProviderUsageSnapshot(
+                providerID: provider.providerID,
+                providerName: provider.providerName,
+                providerIconName: provider.providerIconName,
+                state: .unavailable(message: "Native usage collector not implemented yet"),
                 rows: []
             )
         default:
@@ -494,9 +548,7 @@ enum OpenUsageAPIClient {
         return URLSession(configuration: configuration)
     }()
 
-    static func fetchSnapshots(
-        catalogByProviderID: [String: AIUsageProviderCatalogEntry]
-    ) async -> [AIProviderUsageSnapshot] {
+    static func fetchSnapshots(for providers: [AIProviderUsageDescriptor]) async -> [AIProviderUsageSnapshot] {
         do {
             var request = URLRequest(url: endpointURL)
             request.httpMethod = "GET"
@@ -512,49 +564,36 @@ enum OpenUsageAPIClient {
                 return []
             }
 
-            return try parseSnapshots(from: data, catalogByProviderID: catalogByProviderID)
+            return try parseSnapshots(from: data, providers: providers)
         } catch {
-            if let urlError = error as? URLError {
-                switch urlError.code {
-                case .timedOut,
-                     .cannotFindHost,
-                     .cannotConnectToHost,
-                     .networkConnectionLost,
-                     .notConnectedToInternet:
-                    usageLogger.info("OpenUsage bridge unavailable")
-                default:
-                    usageLogger.info("OpenUsage bridge error: \(urlError.localizedDescription)")
-                }
-            } else {
-                usageLogger.info("OpenUsage bridge parse failed: \(error.localizedDescription)")
-            }
             return []
         }
     }
 
-    static func parseSnapshots(
+    private static func parseSnapshots(
         from data: Data,
-        catalogByProviderID: [String: AIUsageProviderCatalogEntry]
+        providers: [AIProviderUsageDescriptor]
     ) throws -> [AIProviderUsageSnapshot] {
         guard let rawSnapshots = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             return []
         }
 
+        let providerByID = Dictionary(uniqueKeysWithValues: providers.map { (canonicalAIUsageProviderID($0.providerID), $0) })
+
         return rawSnapshots.compactMap { rawSnapshot in
-            guard let rawProviderID = extractString(from: rawSnapshot, keys: ["providerId", "provider_id", "provider", "id"]),
-                  !rawProviderID.isEmpty
+            guard let providerID = extractString(from: rawSnapshot, keys: ["providerId", "provider_id", "provider", "id"]),
+                  !providerID.isEmpty
             else {
                 return nil
             }
 
-            let providerID = canonicalAIUsageProviderID(rawProviderID)
-            let catalogEntry = catalogByProviderID[providerID]
-            let providerName = catalogEntry?.displayName
-                ?? extractString(from: rawSnapshot, keys: ["providerName", "provider_name", "name", "title"])
+            let canonicalProviderID = canonicalAIUsageProviderID(providerID)
+            let providerInfo = providerByID[canonicalProviderID]
+
+            let providerName = providerInfo?.providerName
+                ?? extractString(from: rawSnapshot, keys: ["displayName", "providerName", "provider_name", "name", "title"])
                 ?? providerID
-            let providerIcon = catalogEntry?.iconName
-                ?? extractString(from: rawSnapshot, keys: ["providerIconName", "provider_icon", "icon", "iconName"])
-                ?? "sparkles"
+            let providerIcon = providerInfo?.providerIconName ?? "sparkles"
 
             let rawLines = extractArray(from: rawSnapshot, keys: ["lines", "rows", "metrics", "usage"])
             let rows = rawLines.compactMap { mapMetricRow(from: $0) }
@@ -564,7 +603,7 @@ enum OpenUsageAPIClient {
                 : .available
 
             return AIProviderUsageSnapshot(
-                providerID: providerID,
+                providerID: canonicalProviderID,
                 providerName: providerName,
                 providerIconName: providerIcon,
                 state: state,
@@ -579,33 +618,27 @@ enum OpenUsageAPIClient {
             .lowercased()
 
         let label = extractString(from: rawLine, keys: ["label", "name", "title"]) ?? "Usage"
-
         let resetDate = extractDate(from: rawLine, keys: ["resetsAt", "resetAt", "resetDate"])
 
-        if lineType == "progress" ||
-            (extractDouble(from: rawLine, keys: ["used"]) != nil && extractDouble(from: rawLine, keys: ["limit"]) != nil)
-        {
+        if lineType == "progress" || (extractDouble(from: rawLine, keys: ["used"]) != nil && extractDouble(from: rawLine, keys: ["limit"]) != nil) {
             let used = extractDouble(from: rawLine, keys: ["used", "current", "value"])
             let limit = extractDouble(from: rawLine, keys: ["limit", "max", "total"])
 
-            let percent: Double? = if let used, let limit, limit > 0 {
-                max(0, min(100, (used / limit) * 100))
+            let percent: Double?
+            if let used, let limit, limit > 0 {
+                percent = max(0, min(100, (used / limit) * 100))
             } else {
-                nil
+                percent = nil
             }
 
-            let detail: String? = if let used, let limit {
-                "\(formatUsageNumber(used))/\(formatUsageNumber(limit))"
+            let detail: String?
+            if let used, let limit {
+                detail = "\(formatUsageNumber(used))/\(formatUsageNumber(limit))"
             } else {
-                nil
+                detail = nil
             }
 
             return AIUsageMetricRow(label: label, percent: percent, resetDate: resetDate, detail: detail)
-        }
-
-        if lineType == "badge" {
-            let detail = extractString(from: rawLine, keys: ["value", "subtitle", "detail", "text"])
-            return AIUsageMetricRow(label: label, percent: nil, resetDate: resetDate, detail: detail)
         }
 
         let detail = extractString(from: rawLine, keys: ["value", "detail", "text", "subtitle"])
@@ -674,7 +707,7 @@ enum OpenUsageAPIClient {
 
             if let number = value as? NSNumber {
                 let raw = number.doubleValue
-                let seconds = raw > 10_000_000_000 ? raw / 1000 : raw
+                let seconds = raw > 10_000_000_000 ? raw / 1_000 : raw
                 return Date(timeIntervalSince1970: seconds)
             }
         }

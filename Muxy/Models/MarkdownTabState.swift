@@ -91,7 +91,12 @@ final class MarkdownTabState {
         renderedHTMLCache = (key, html)
 
         markdownLogger.debug(
-            "Rendered markdown html path=\(self.filePath ?? "<nil>", privacy: .public) contentBytes=\((self.rawContent ?? "").utf8.count) htmlLength=\(html.utf8.count)"
+            """
+            Rendered markdown html
+            path=\(self.filePath ?? "<nil>", privacy: .public)
+            contentBytes=\((self.rawContent ?? "").utf8.count)
+            htmlLength=\(html.utf8.count)
+            """
         )
         return html
     }
@@ -123,7 +128,14 @@ final class MarkdownTabState {
             rawContent = nil
             errorMessage = "Not a markdown file: \(url.pathExtension)"
             markdownLogger.error(
-                "Rejected non-markdown file path=\(path, privacy: .public) extension=\(url.pathExtension, privacy: .public) bytes=0 status=failure reason=unsupported-extension"
+                """
+                Rejected non-markdown file
+                path=\(path, privacy: .public)
+                extension=\(url.pathExtension, privacy: .public)
+                bytes=0
+                status=failure
+                reason=unsupported-extension
+                """
             )
             isLoading = false
             return
@@ -143,13 +155,26 @@ final class MarkdownTabState {
                 case let .success(loaded):
                     self.rawContent = loaded.content
                     markdownLogger.info(
-                        "Loaded markdown file path=\(path, privacy: .public) extension=\(ext, privacy: .public) bytes=\(loaded.bytes) status=success"
+                        """
+                        Loaded markdown file
+                        path=\(path, privacy: .public)
+                        extension=\(ext, privacy: .public)
+                        bytes=\(loaded.bytes)
+                        status=success
+                        """
                     )
                 case let .failure(error, loadedBytes):
                     self.rawContent = nil
                     self.errorMessage = error.localizedDescription
                     markdownLogger.error(
-                        "Failed loading markdown file path=\(path, privacy: .public) extension=\(ext, privacy: .public) bytes=\(loadedBytes ?? -1) status=failure reason=\(error.localizedDescription, privacy: .public)"
+                        """
+                        Failed loading markdown file
+                        path=\(path, privacy: .public)
+                        extension=\(ext, privacy: .public)
+                        bytes=\(loadedBytes ?? -1)
+                        status=failure
+                        reason=\(error.localizedDescription, privacy: .public)
+                        """
                     )
                 }
 
@@ -848,7 +873,10 @@ enum MarkdownRenderer {
                                 for (var id in diagramMap) {
                                     var el = document.getElementById(id);
                                     if (el) {
-                                        el.innerHTML = '<div class="mermaid-error">Mermaid.js not loaded. Check your internet connection or CDN access.</div>';
+                                        el.innerHTML = '<div class="mermaid-error">'
+                                            + 'Mermaid.js not loaded. '
+                                            + 'Check your internet connection or CDN access.'
+                                            + '</div>';
                                     }
                                 }
                             }

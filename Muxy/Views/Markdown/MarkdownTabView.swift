@@ -27,7 +27,10 @@ private enum MarkdownWebBridge {
         const wheelHandler = window.webkit?.messageHandlers?.muxyMarkdownWheel;
         if (!handler) return;
 
-        const scrollRoot = () => document.getElementById('content') || document.scrollingElement || document.documentElement || document.body;
+        const scrollRoot = () => document.getElementById('content')
+            || document.scrollingElement
+            || document.documentElement
+            || document.body;
         const report = () => {
             const root = scrollRoot();
             if (!root) return;
@@ -60,7 +63,10 @@ private enum MarkdownWebBridge {
         let clamped = min(max(progress, 0), 1)
         return """
         (() => {
-            const root = document.getElementById('content') || document.scrollingElement || document.documentElement || document.body;
+            const root = document.getElementById('content')
+                || document.scrollingElement
+                || document.documentElement
+                || document.body;
             if (!root) return;
             const maxScrollY = Math.max(0, root.scrollHeight - root.clientHeight);
             root.scrollTop = maxScrollY * \(clamped);
@@ -230,6 +236,15 @@ struct MarkdownTabView: View {
 }
 
 struct MarkdownWebView: NSViewRepresentable {
+    struct Configuration {
+        let scrollSyncEnabled: Bool
+        let showsVerticalScroller: Bool
+        let hidesContentScrollbar: Bool
+        let linkedScrollEnabled: Bool
+        let onScrollProgressChanged: ((CGFloat) -> Void)?
+        let onLinkedScrollWheel: ((CGFloat) -> Void)?
+    }
+
     let html: String
     let filePath: String?
     @Binding var scrollPosition: CGFloat
@@ -239,6 +254,17 @@ struct MarkdownWebView: NSViewRepresentable {
     var linkedScrollEnabled = false
     var onScrollProgressChanged: ((CGFloat) -> Void)?
     var onLinkedScrollWheel: ((CGFloat) -> Void)?
+
+    private var configuration: Configuration {
+        Configuration(
+            scrollSyncEnabled: scrollSyncEnabled,
+            showsVerticalScroller: showsVerticalScroller,
+            hidesContentScrollbar: hidesContentScrollbar,
+            linkedScrollEnabled: linkedScrollEnabled,
+            onScrollProgressChanged: onScrollProgressChanged,
+            onLinkedScrollWheel: onLinkedScrollWheel
+        )
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -250,14 +276,7 @@ struct MarkdownWebView: NSViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
-        context.coordinator.configure(
-            scrollSyncEnabled: scrollSyncEnabled,
-            showsVerticalScroller: showsVerticalScroller,
-            hidesContentScrollbar: hidesContentScrollbar,
-            linkedScrollEnabled: linkedScrollEnabled,
-            onScrollProgressChanged: onScrollProgressChanged,
-            onLinkedScrollWheel: onLinkedScrollWheel
-        )
+        context.coordinator.configure(with: configuration)
         context.coordinator.updateScrollerVisibility(in: webView)
         if scrollSyncEnabled {
             context.coordinator.applyScrollProgress(scrollPosition, to: webView)
@@ -268,14 +287,7 @@ struct MarkdownWebView: NSViewRepresentable {
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        context.coordinator.configure(
-            scrollSyncEnabled: scrollSyncEnabled,
-            showsVerticalScroller: showsVerticalScroller,
-            hidesContentScrollbar: hidesContentScrollbar,
-            linkedScrollEnabled: linkedScrollEnabled,
-            onScrollProgressChanged: onScrollProgressChanged,
-            onLinkedScrollWheel: onLinkedScrollWheel
-        )
+        context.coordinator.configure(with: configuration)
         context.coordinator.updateScrollerVisibility(in: webView)
         context.coordinator.updateContentScrollbarVisibility(in: webView)
         context.coordinator.updateHTML(
@@ -315,20 +327,13 @@ struct MarkdownWebView: NSViewRepresentable {
         private var isNavigationInFlight = false
         private var programmaticScrollSuppressionUntil: Date?
 
-        func configure(
-            scrollSyncEnabled: Bool,
-            showsVerticalScroller: Bool,
-            hidesContentScrollbar: Bool,
-            linkedScrollEnabled: Bool,
-            onScrollProgressChanged: ((CGFloat) -> Void)?,
-            onLinkedScrollWheel: ((CGFloat) -> Void)?
-        ) {
-            self.scrollSyncEnabled = scrollSyncEnabled
-            self.showsVerticalScroller = showsVerticalScroller
-            self.hidesContentScrollbar = hidesContentScrollbar
-            self.linkedScrollEnabled = linkedScrollEnabled
-            self.onScrollProgressChanged = onScrollProgressChanged
-            self.onLinkedScrollWheel = onLinkedScrollWheel
+        func configure(with configuration: Configuration) {
+            scrollSyncEnabled = configuration.scrollSyncEnabled
+            showsVerticalScroller = configuration.showsVerticalScroller
+            hidesContentScrollbar = configuration.hidesContentScrollbar
+            linkedScrollEnabled = configuration.linkedScrollEnabled
+            onScrollProgressChanged = configuration.onScrollProgressChanged
+            onLinkedScrollWheel = configuration.onLinkedScrollWheel
         }
 
         func updateScrollerVisibility(in webView: WKWebView) {
@@ -411,10 +416,17 @@ struct MarkdownWebView: NSViewRepresentable {
                 loadCount += 1
                 isNavigationInFlight = true
                 markdownWebLogger.debug(
-                    "Markdown web update seq=\(self.loadCount) path=\(filePath ?? "<nil>", privacy: .public) htmlLength=\(html.utf8.count) pendingScrollProgress=\(scrollPosition)"
+                    """
+                    Markdown web update seq=\(self.loadCount)
+                    path=\(filePath ?? "<nil>", privacy: .public)
+                    htmlLength=\(html.utf8.count) pendingScrollProgress=\(scrollPosition)
+                    """
                 )
                 activeNavigation = webView.loadHTMLString(html, baseURL: nil)
-            } else if scrollSyncEnabled, syncWasJustEnabled || scrollPosition != lastScrollProgress, scrollPosition >= 0 {
+            } else if scrollSyncEnabled,
+                      syncWasJustEnabled || scrollPosition != lastScrollProgress,
+                      scrollPosition >= 0
+            {
                 applyScrollProgress(scrollPosition, to: webView)
             }
         }
@@ -432,7 +444,11 @@ struct MarkdownWebView: NSViewRepresentable {
                 return
             }
             markdownWebLogger.debug(
-                "Markdown navigation didFinish seq=\(self.loadCount) path=\(self.currentFilePath ?? "<nil>", privacy: .public)"
+                """
+                Markdown navigation didFinish
+                seq=\(self.loadCount)
+                path=\(self.currentFilePath ?? "<nil>", privacy: .public)
+                """
             )
             isNavigationInFlight = false
             if let pending = pendingScrollProgress {
@@ -462,7 +478,11 @@ struct MarkdownWebView: NSViewRepresentable {
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             isNavigationInFlight = false
             markdownWebLogger.error(
-                "Markdown web content process terminated path=\(self.currentFilePath ?? "<nil>", privacy: .public) reason=process-terminated"
+                """
+                Markdown web content process terminated
+                path=\(self.currentFilePath ?? "<nil>", privacy: .public)
+                reason=process-terminated
+                """
             )
         }
 
@@ -523,7 +543,10 @@ struct MarkdownWebView: NSViewRepresentable {
                     self.isApplyingProgrammaticScroll = false
                     self.programmaticScrollSuppressionUntil = nil
                     markdownWebLogger.error(
-                        "Failed applying markdown scroll progress: \(error.localizedDescription, privacy: .public)"
+                        """
+                        Failed applying markdown scroll progress
+                        reason=\(error.localizedDescription, privacy: .public)
+                        """
                     )
                     return
                 }
@@ -536,12 +559,20 @@ struct MarkdownWebView: NSViewRepresentable {
             let nsError = error as NSError
             if let navigation, let activeNavigation, navigation !== activeNavigation {
                 markdownWebLogger.debug(
-                    "Ignoring stale markdown \(kind, privacy: .public) failure code=\(nsError.code) domain=\(nsError.domain, privacy: .public)"
+                    """
+                    Ignoring stale markdown \(kind, privacy: .public) failure
+                    code=\(nsError.code) domain=\(nsError.domain, privacy: .public)
+                    """
                 )
                 return
             }
             markdownWebLogger.error(
-                "Markdown \(kind, privacy: .public) failure path=\(self.currentFilePath ?? "<nil>", privacy: .public) code=\(nsError.code) domain=\(nsError.domain, privacy: .public) reason=\(nsError.localizedDescription, privacy: .public)"
+                """
+                Markdown \(kind, privacy: .public) failure
+                path=\(self.currentFilePath ?? "<nil>", privacy: .public)
+                code=\(nsError.code) domain=\(nsError.domain, privacy: .public)
+                reason=\(nsError.localizedDescription, privacy: .public)
+                """
             )
         }
 
@@ -557,7 +588,10 @@ struct MarkdownWebView: NSViewRepresentable {
             webView.evaluateJavaScript(script) { result, error in
                 if let error {
                     markdownWebLogger.error(
-                        "Failed collecting markdown JavaScript errors: \(error.localizedDescription, privacy: .public)"
+                        """
+                        Failed collecting markdown JavaScript errors
+                        reason=\(error.localizedDescription, privacy: .public)
+                        """
                     )
                     return
                 }
@@ -571,7 +605,11 @@ struct MarkdownWebView: NSViewRepresentable {
                     let message = (entry["message"] as? String) ?? ""
                     let source = (entry["source"] as? String) ?? ""
                     markdownWebLogger.error(
-                        "Markdown JavaScript \(type, privacy: .public) message=\(message, privacy: .public) source=\(source, privacy: .public)"
+                        """
+                        Markdown JavaScript \(type, privacy: .public)
+                        message=\(message, privacy: .public)
+                        source=\(source, privacy: .public)
+                        """
                     )
                 }
             }

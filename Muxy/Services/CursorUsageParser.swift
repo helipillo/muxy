@@ -25,6 +25,7 @@ enum CursorUsageParser {
         let isTeamPlan = isTeam(planName: planName, spendLimit: spendLimit)
 
         let resetDate = AIUsageParserSupport.date(in: usagePayload, keys: ["billingCycleEnd"])
+        let billingPeriod: TimeInterval = 30 * 24 * 60 * 60
 
         var rows: [AIUsageMetricRow] = []
 
@@ -40,7 +41,8 @@ enum CursorUsageParser {
                     label: "Total usage",
                     percent: AIUsageParserSupport.utilizationPercent(used: usedDollars, limit: limitDollars),
                     resetDate: resetDate,
-                    detail: "\(AIUsageParserSupport.formatNumber(usedDollars))/\(AIUsageParserSupport.formatNumber(limitDollars))"
+                    detail: "\(AIUsageParserSupport.formatNumber(usedDollars))/\(AIUsageParserSupport.formatNumber(limitDollars))",
+                    periodDuration: resetDate == nil ? nil : billingPeriod
                 )
             )
         } else {
@@ -53,7 +55,8 @@ enum CursorUsageParser {
                         label: "Total usage",
                         percent: max(0, min(100, totalPercent)),
                         resetDate: resetDate,
-                        detail: "\(AIUsageParserSupport.formatNumber(max(0, min(100, totalPercent))))/100"
+                        detail: "\(AIUsageParserSupport.formatNumber(max(0, min(100, totalPercent))))/100",
+                        periodDuration: resetDate == nil ? nil : billingPeriod
                     )
                 )
             }
@@ -65,7 +68,8 @@ enum CursorUsageParser {
                     label: "Auto usage",
                     percent: max(0, min(100, autoPercent)),
                     resetDate: resetDate,
-                    detail: "\(AIUsageParserSupport.formatNumber(max(0, min(100, autoPercent))))/100"
+                    detail: "\(AIUsageParserSupport.formatNumber(max(0, min(100, autoPercent))))/100",
+                    periodDuration: resetDate == nil ? nil : billingPeriod
                 )
             )
         }
@@ -76,7 +80,8 @@ enum CursorUsageParser {
                     label: "API usage",
                     percent: max(0, min(100, apiPercent)),
                     resetDate: resetDate,
-                    detail: "\(AIUsageParserSupport.formatNumber(max(0, min(100, apiPercent))))/100"
+                    detail: "\(AIUsageParserSupport.formatNumber(max(0, min(100, apiPercent))))/100",
+                    periodDuration: resetDate == nil ? nil : billingPeriod
                 )
             )
         }
@@ -102,7 +107,8 @@ enum CursorUsageParser {
                         label: "On-demand",
                         percent: AIUsageParserSupport.utilizationPercent(used: used / 100, limit: limit / 100),
                         resetDate: resetDate,
-                        detail: "\(AIUsageParserSupport.formatNumber(used / 100))/\(AIUsageParserSupport.formatNumber(limit / 100))"
+                        detail: "\(AIUsageParserSupport.formatNumber(used / 100))/\(AIUsageParserSupport.formatNumber(limit / 100))",
+                        periodDuration: resetDate == nil ? nil : billingPeriod
                     )
                 )
             }

@@ -9,6 +9,8 @@ enum CopilotUsageParser {
         var rows: [AIUsageMetricRow] = []
 
         if let resetDate = AIUsageParserSupport.date(in: payload, keys: ["quota_reset_date", "limited_user_reset_date"]) {
+            let monthlyPeriod: TimeInterval = 30 * 24 * 60 * 60
+
             if let snapshots = payload["quota_snapshots"] as? [String: Any] {
                 let orderedKeys = ["premium_interactions", "chat"]
                 for rawLabel in orderedKeys {
@@ -23,7 +25,8 @@ enum CopilotUsageParser {
                             label: displayLabel(for: rawLabel),
                             percent: percentUsed,
                             resetDate: resetDate,
-                            detail: detail
+                            detail: detail,
+                            periodDuration: monthlyPeriod
                         )
                     )
                 }
@@ -40,7 +43,8 @@ enum CopilotUsageParser {
                             label: displayLabel(for: rawLabel),
                             percent: percentUsed,
                             resetDate: resetDate,
-                            detail: detail
+                            detail: detail,
+                            periodDuration: monthlyPeriod
                         )
                     )
                 }
@@ -57,7 +61,8 @@ enum CopilotUsageParser {
                             label: displayLabel(for: rawLabel),
                             percent: AIUsageParserSupport.utilizationPercent(used: used, limit: total),
                             resetDate: resetDate,
-                            detail: AIUsageParserSupport.usageDetail(used: used, limit: total)
+                            detail: AIUsageParserSupport.usageDetail(used: used, limit: total),
+                            periodDuration: monthlyPeriod
                         )
                     )
                 }

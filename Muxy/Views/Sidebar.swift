@@ -617,10 +617,17 @@ private struct AIUsageMetricRowView: View {
                     .foregroundStyle(MuxyTheme.fgMuted)
 
                 if let tooltip = paceTooltip {
-                    Circle()
-                        .fill(paceIndicatorColor)
-                        .frame(width: 5, height: 5)
-                        .help(tooltip)
+                    ZStack {
+                        Circle()
+                            .fill(paceIndicatorColor)
+                            .frame(width: 5, height: 5)
+
+                        Rectangle()
+                            .fill(Color.clear)
+                            .frame(width: 14, height: 14)
+                            .contentShape(Rectangle())
+                    }
+                    .help(tooltip)
                 }
                 Spacer()
                 if let percent = displayPercent {

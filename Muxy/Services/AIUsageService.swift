@@ -340,6 +340,21 @@ final class AIUsageService {
     @ObservationIgnored private var fetchedSnapshotsCache: [AIProviderUsageSnapshot] = []
     @ObservationIgnored private var previousSnapshotsCache: [AIProviderUsageSnapshot] = []
 
+    /// The provider with the highest current usage percentage.
+    ///
+    /// This is what we show in the sidebar footer preview. It is intentionally
+    /// independent from refresh-to-refresh "movement".
+    var mostUsedProviderSnapshot: AIProviderUsageSnapshot? {
+        snapshots
+            .filter { snapshot in
+                guard case .available = snapshot.state else { return false }
+                return snapshot.rows.contains { $0.percent != nil }
+            }
+            .max {
+                ($0.rows.compactMap(\.percent).max() ?? 0) < ($1.rows.compactMap(\.percent).max() ?? 0)
+            }
+    }
+
     var mostActiveProviderSnapshot: AIProviderUsageSnapshot? {
         guard !snapshots.isEmpty else { return nil }
 

@@ -303,16 +303,16 @@ struct SidebarFooter: View {
         usageService.isRefreshing ? "arrow.clockwise" : "sparkles"
     }
 
-    private var mostActiveProviderDisplay: (percent: Int, iconName: String)? {
-        guard let snapshot = usageService.mostActiveProviderSnapshot,
+    private var mostUsedProviderDisplay: (percent: Int, iconName: String)? {
+        guard let snapshot = usageService.mostUsedProviderSnapshot,
               case .available = snapshot.state
         else { return nil }
         let percent = Int((snapshot.rows.compactMap(\.percent).max() ?? 0).rounded())
         return (percent, snapshot.providerIconName)
     }
 
-    private var mostActiveProviderPercentLabel: String? {
-        guard let display = mostActiveProviderDisplay else { return nil }
+    private var mostUsedProviderPercentLabel: String? {
+        guard let display = mostUsedProviderDisplay else { return nil }
         if display.percent >= 100 { return "100" }
         if display.percent <= 0 { return "0%" }
         return "\(display.percent)%"
@@ -325,15 +325,22 @@ struct SidebarFooter: View {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(MuxyTheme.fgMuted)
-                } else if let display = mostActiveProviderDisplay, let label = mostActiveProviderPercentLabel {
+                } else if let display = mostUsedProviderDisplay, let label = mostUsedProviderPercentLabel {
                     ZStack(alignment: .bottomTrailing) {
-                        ProviderIconView(iconName: display.iconName, size: 14, style: .monochrome(MuxyTheme.fgMuted))
+                        ProviderIconView(iconName: display.iconName, size: 16, style: .monochrome(MuxyTheme.fgMuted))
                             .opacity(0.75)
                         Text(label)
                             .font(.system(size: 7, weight: .semibold))
                             .foregroundStyle(MuxyTheme.fgMuted)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
+                            .padding(.horizontal, 2)
+                            .padding(.vertical, 1)
+                            .background(MuxyTheme.bg.opacity(0.92), in: RoundedRectangle(cornerRadius: 3))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .stroke(MuxyTheme.border, lineWidth: 0.5)
+                            )
                             .padding(.trailing, 1)
                             .padding(.bottom, 1)
                     }

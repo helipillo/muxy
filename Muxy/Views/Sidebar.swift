@@ -241,10 +241,16 @@ private struct AddProjectButton: View {
 struct SidebarFooter: View {
     var expanded: Bool = false
     @AppStorage(AIUsageSettingsStore.usageEnabledKey) private var usageEnabled = false
+    @AppStorage(AIUsageSettingsStore.usageDisplayModeKey) private var usageDisplayModeRaw = AIUsageSettingsStore.defaultUsageDisplayMode
+        .rawValue
     @State private var showThemePicker = false
     @State private var showNotifications = false
     @State private var showAIUsagePopover = false
     @State private var usageService = AIUsageService.shared
+
+    private var usageDisplayMode: AIUsageDisplayMode {
+        AIUsageDisplayMode(rawValue: usageDisplayModeRaw) ?? AIUsageSettingsStore.defaultUsageDisplayMode
+    }
 
     private let usageRefreshTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
@@ -307,53 +313,31 @@ struct SidebarFooter: View {
         guard let snapshot = usageService.mostUsedProviderSnapshot,
               case .available = snapshot.state
         else { return nil }
-        let percent = Int((snapshot.rows.compactMap(\.percent).max() ?? 0).rounded())
-        return (percent, snapshot.providerIconName)
+
+        let usedPercent = max(0, min(100, snapshot.rows.compactMap(\.percent).max() ?? 0))
+        let displayPercent: Double = switch usageDisplayMode {
+        case .used:
+            usedPercent
+        case .remaining:
+            max(0, min(100, 100 - usedPercent))
+        }
+
+        return (Int(displayPercent.rounded()), snapshot.providerIconName)
     }
 
     private var mostUsedProviderPercentLabel: String? {
         guard let display = mostUsedProviderDisplay else { return nil }
-        if display.percent >= 100 { return "100" }
-        if display.percent <= 0 { return "0%" }
-        return "\(display.percent)%"
+        return "\(max(0, min(100, display.percent)))%"
     }
 
     private var aiUsageButton: some View {
-        Button { showAIUsagePopover.toggle() } label: {
-            Group {
-                if usageService.isRefreshing {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(MuxyTheme.fgMuted)
-                } else if let display = mostUsedProviderDisplay, let label = mostUsedProviderPercentLabel {
-                    ZStack(alignment: .bottomTrailing) {
-                        ProviderIconView(iconName: display.iconName, size: 16, style: .monochrome(MuxyTheme.fgMuted))
-                            .opacity(0.75)
-                        Text(label)
-                            .font(.system(size: 7, weight: .semibold))
-                            .foregroundStyle(MuxyTheme.fgMuted)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                            .padding(.horizontal, 2)
-                            .padding(.vertical, 1)
-                            .background(MuxyTheme.bg.opacity(0.92), in: RoundedRectangle(cornerRadius: 3))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 3)
-                                    .stroke(MuxyTheme.border, lineWidth: 0.5)
-                            )
-                            .padding(.trailing, 1)
-                            .padding(.bottom, 1)
-                    }
-                } else {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(MuxyTheme.fgMuted)
-                }
-            }
-            .frame(width: 24, height: 24)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        AIUsagePreviewButton(
+            display: mostUsedProviderDisplay,
+            percentLabel: mostUsedProviderPercentLabel,
+            isRefreshing: usageService.isRefreshing,
+            expanded: expanded,
+            onTap: { showAIUsagePopover.toggle() }
+        )
         .popover(isPresented: $showAIUsagePopover) {
             AIUsagePanel(
                 snapshots: usageService.snapshots,
@@ -411,6 +395,54 @@ struct SidebarFooter: View {
         Task {
             await usageService.refresh(force: true)
         }
+    }
+}
+
+private struct AIUsagePreviewButton: View {
+    let display: (percent: Int, iconName: String)?
+    let percentLabel: String?
+    let isRefreshing: Bool
+    let expanded: Bool
+    let onTap: () -> Void
+
+    @State private var hovered = false
+
+    private var foreground: Color {
+        hovered ? MuxyTheme.fg : MuxyTheme.fgMuted
+    }
+
+    private var background: Color {
+        hovered ? MuxyTheme.hover : Color.clear
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 4) {
+                if isRefreshing {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(foreground)
+                } else if let display, let percentLabel {
+                    ProviderIconView(iconName: display.iconName, size: 13, style: .monochrome(foreground))
+                    Text(percentLabel)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(foreground)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(foreground)
+                }
+            }
+            .frame(height: 24)
+            .padding(.horizontal, expanded ? 6 : 7)
+            .background(background, in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .accessibilityLabel("AI Usage")
     }
 }
 

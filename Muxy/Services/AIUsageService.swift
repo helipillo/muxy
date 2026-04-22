@@ -340,10 +340,13 @@ final class AIUsageService {
     @ObservationIgnored private var fetchedSnapshotsCache: [AIProviderUsageSnapshot] = []
     @ObservationIgnored private var previousSnapshotsCache: [AIProviderUsageSnapshot] = []
 
+    private func usedPercent(for snapshot: AIProviderUsageSnapshot) -> Double? {
+        guard case .available = snapshot.state else { return nil }
+        guard let maxPercent = snapshot.rows.compactMap(\.percent).max() else { return nil }
+        return max(0, min(100, maxPercent))
+    }
+
     /// The provider with the highest current usage percentage.
-    ///
-    /// This is what we show in the sidebar footer preview. It is intentionally
-    /// independent from refresh-to-refresh "movement".
     var mostUsedProviderSnapshot: AIProviderUsageSnapshot? {
         snapshots
             .filter { snapshot in
@@ -355,6 +358,17 @@ final class AIUsageService {
             }
     }
 
+    /// Snapshot used for the sidebar footer preview.
+    ///
+    /// - With previous data: provider with the largest change in used % since last refresh.
+    /// - Without previous data: provider with the highest used %.
+    var previewProviderSnapshot: AIProviderUsageSnapshot? {
+        if previousSnapshotsCache.isEmpty {
+            return mostUsedProviderSnapshot
+        }
+        return mostActiveProviderSnapshot ?? mostUsedProviderSnapshot
+    }
+
     var mostActiveProviderSnapshot: AIProviderUsageSnapshot? {
         guard !snapshots.isEmpty else { return nil }
 
@@ -362,12 +376,10 @@ final class AIUsageService {
         var mostActive: AIProviderUsageSnapshot?
 
         for current in snapshots {
-            guard case .available = current.state else { continue }
+            guard let currentPercent = usedPercent(for: current) else { continue }
 
-            let currentPercent = current.rows.compactMap(\.percent).max() ?? 0
             let score: Double = if let previous = previousSnapshotsCache.first(where: { $0.providerID == current.providerID }),
-                                   case .available = previous.state,
-                                   let previousPercent = previous.rows.compactMap(\.percent).max()
+                                   let previousPercent = usedPercent(for: previous)
             {
                 abs(currentPercent - previousPercent)
             } else {

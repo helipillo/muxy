@@ -309,8 +309,8 @@ struct SidebarFooter: View {
         usageService.isRefreshing ? "arrow.clockwise" : "sparkles"
     }
 
-    private var mostUsedProviderDisplay: (percent: Int, iconName: String)? {
-        guard let snapshot = usageService.mostUsedProviderSnapshot,
+    private var previewProviderDisplay: (percent: Int, iconName: String)? {
+        guard let snapshot = usageService.previewProviderSnapshot,
               case .available = snapshot.state
         else { return nil }
 
@@ -325,15 +325,15 @@ struct SidebarFooter: View {
         return (Int(displayPercent.rounded()), snapshot.providerIconName)
     }
 
-    private var mostUsedProviderPercentLabel: String? {
-        guard let display = mostUsedProviderDisplay else { return nil }
+    private var previewProviderPercentLabel: String? {
+        guard let display = previewProviderDisplay else { return nil }
         return "\(max(0, min(100, display.percent)))%"
     }
 
     private var aiUsageButton: some View {
         AIUsagePreviewButton(
-            display: mostUsedProviderDisplay,
-            percentLabel: mostUsedProviderPercentLabel,
+            display: previewProviderDisplay,
+            percentLabel: previewProviderPercentLabel,
             isRefreshing: usageService.isRefreshing,
             expanded: expanded,
             onTap: { showAIUsagePopover.toggle() }
@@ -432,7 +432,6 @@ private struct AIUsagePreviewButton: View {
         .accessibilityLabel("AI Usage")
     }
 
-    @ViewBuilder
     private var expandedLabel: some View {
         HStack(spacing: 4) {
             if isRefreshing {

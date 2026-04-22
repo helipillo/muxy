@@ -1073,15 +1073,15 @@ struct CodeEditorView: NSViewRepresentable {
 
         @objc
         private func handleScrollBoundsChange() {
-            reconcileClipSize(observedContentView?.bounds.size)
+            reconcileScrollBoundsChange(observedContentView?.bounds.size)
         }
 
         @objc
         private func handleClipFrameChange() {
-            reconcileClipSize(observedContentView?.frame.size)
+            reconcileClipFrameChange(observedContentView?.frame.size)
         }
 
-        private func reconcileClipSize(_ size: CGSize?) {
+        private func reconcileScrollBoundsChange(_ size: CGSize?) {
             if let size {
                 if size.width != lastObservedClipSize.width {
                     ensureViewportMinimumWidth()
@@ -1095,6 +1095,21 @@ struct CodeEditorView: NSViewRepresentable {
                 isApplyingMarkdownScroll = false
             } else {
                 updateMarkdownPreviewScrollProgress()
+            }
+            if !isEditingViewport {
+                refreshViewport(force: false)
+            }
+        }
+
+        private func reconcileClipFrameChange(_ size: CGSize?) {
+            if let size {
+                if size.width != lastObservedClipSize.width {
+                    ensureViewportMinimumWidth()
+                }
+                if size.height != lastObservedClipSize.height {
+                    updateContainerHeight()
+                }
+                lastObservedClipSize = size
             }
             if !isEditingViewport {
                 refreshViewport(force: false)

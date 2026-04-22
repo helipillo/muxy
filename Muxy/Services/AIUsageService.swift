@@ -102,9 +102,11 @@ enum AIUsageSettingsStore {
     static let autoRefreshIntervalKey = "muxy.usage.autoRefreshIntervalSeconds"
     static let usageDisplayModeKey = "muxy.usage.displayMode"
     static let usageEnabledKey = "muxy.usage.enabled"
+    static let showSecondaryLimitsKey = "muxy.usage.showSecondaryLimits"
 
     static let defaultAutoRefreshInterval: AIUsageAutoRefreshInterval = .fiveMinutes
     static let defaultUsageDisplayMode: AIUsageDisplayMode = .used
+    static let defaultShowSecondaryLimits = false
 
     static func autoRefreshInterval(defaults: UserDefaults = .standard) -> AIUsageAutoRefreshInterval {
         guard defaults.object(forKey: autoRefreshIntervalKey) != nil else {
@@ -153,6 +155,17 @@ enum AIUsageSettingsStore {
 
     static func setUsageEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: usageEnabledKey)
+    }
+
+    static func showSecondaryLimits(defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: showSecondaryLimitsKey) != nil else {
+            return defaultShowSecondaryLimits
+        }
+        return defaults.bool(forKey: showSecondaryLimitsKey)
+    }
+
+    static func setShowSecondaryLimits(_ show: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(show, forKey: showSecondaryLimitsKey)
     }
 }
 
@@ -242,19 +255,13 @@ enum AIUsageProviderCatalog {
     private static let bundledSeedProviders: [AIUsageProviderCatalogEntry] = [
         .init(id: "codex", displayName: "Codex", iconName: "codex", source: .bundled),
         .init(id: "copilot", displayName: "Copilot", iconName: "copilot", source: .bundled),
-        .init(id: "cursor", displayName: "Cursor", iconName: "cursor", source: .bundled),
         .init(id: "gemini", displayName: "Gemini", iconName: "gemini", source: .bundled),
         .init(id: "minimax", displayName: "MiniMax", iconName: "minimax", source: .bundled),
         .init(id: "opencode-go", displayName: "OpenCode Go", iconName: "opencode-go", source: .bundled),
-        .init(id: "windsurf", displayName: "Windsurf", iconName: "windsurf", source: .bundled),
         .init(id: "kimi", displayName: "Kimi", iconName: "kimi", source: .bundled),
-        .init(id: "kiro", displayName: "Kiro", iconName: "kiro", source: .bundled),
-        .init(id: "antigravity", displayName: "Antigravity", iconName: "antigravity", source: .bundled),
         .init(id: "amp", displayName: "Amp", iconName: "amp", source: .bundled),
         .init(id: "factory", displayName: "Factory", iconName: "factory", source: .bundled),
-        .init(id: "jetbrains-ai-assistant", displayName: "JetBrains AI Assistant", iconName: "jetbrains-ai-assistant", source: .bundled),
         .init(id: "zai", displayName: "Z.ai", iconName: "zai", source: .bundled),
-        .init(id: "perplexity", displayName: "Perplexity", iconName: "perplexity", source: .bundled),
     ]
 
     static func canonicalID(for providerID: String) -> String {
@@ -265,7 +272,8 @@ enum AIUsageProviderCatalog {
 enum AIUsageSnapshotComposer {
     static func compose(
         trackedProviders: [AITrackedProviderUsageDescriptor],
-        fetchedSnapshots: [AIProviderUsageSnapshot]
+        fetchedSnapshots: [AIProviderUsageSnapshot],
+        includeSecondary: Bool = false
     ) -> [AIProviderUsageSnapshot] {
         let snapshotByProviderID = Dictionary(uniqueKeysWithValues: fetchedSnapshots
             .map { (canonicalAIUsageProviderID($0.providerID), $0) })
@@ -282,7 +290,7 @@ enum AIUsageSnapshotComposer {
             }
 
             if let snapshot = snapshotByProviderID[canonicalAIUsageProviderID(provider.providerID)] {
-                return snapshot
+                return filterVisibleRows(snapshot, includeSecondary: includeSecondary)
             }
 
             return AIProviderUsageSnapshot(
@@ -293,6 +301,61 @@ enum AIUsageSnapshotComposer {
                 rows: []
             )
         }
+    }
+
+    private static func filterVisibleRows(
+        _ snapshot: AIProviderUsageSnapshot,
+        includeSecondary: Bool
+    ) -> AIProviderUsageSnapshot {
+        guard case .available = snapshot.state else { return snapshot }
+
+        let visibleRows = snapshot.rows.filter { row in
+            AIUsageRowPolicy.isVisible(row, includeSecondary: includeSecondary)
+        }
+        if visibleRows.isEmpty {
+            return AIProviderUsageSnapshot(
+                providerID: snapshot.providerID,
+                providerName: snapshot.providerName,
+                providerIconName: snapshot.providerIconName,
+                fetchedAt: snapshot.fetchedAt,
+                state: .unavailable(message: "No usage data"),
+                rows: []
+            )
+        }
+
+        return AIProviderUsageSnapshot(
+            providerID: snapshot.providerID,
+            providerName: snapshot.providerName,
+            providerIconName: snapshot.providerIconName,
+            fetchedAt: snapshot.fetchedAt,
+            state: snapshot.state,
+            rows: visibleRows
+        )
+    }
+}
+
+enum AIUsageRowPolicy {
+    private static let primaryLabelPrefixes = ["session", "5h", "premium", "hourly", "primary"]
+    private static let secondaryLabelPrefixes = ["weekly", "week", "7d", "monthly", "month", "daily", "day", "billing"]
+
+    static func isPrimary(_ row: AIUsageMetricRow) -> Bool {
+        matches(row, prefixes: primaryLabelPrefixes)
+    }
+
+    static func isSecondary(_ row: AIUsageMetricRow) -> Bool {
+        matches(row, prefixes: secondaryLabelPrefixes)
+    }
+
+    static func isVisible(_ row: AIUsageMetricRow, includeSecondary: Bool) -> Bool {
+        if isPrimary(row) { return true }
+        if includeSecondary, isSecondary(row) { return true }
+        return false
+    }
+
+    private static func matches(_ row: AIUsageMetricRow, prefixes: [String]) -> Bool {
+        if let detail = row.detail, detail.contains("$") { return false }
+        let label = row.label.trimmingCharacters(in: .whitespaces).lowercased()
+        return prefixes.contains { label.hasPrefix($0) }
     }
 }
 
@@ -533,7 +596,8 @@ final class AIUsageService {
 
         return AIUsageSnapshotComposer.compose(
             trackedProviders: trackedProviders,
-            fetchedSnapshots: fetchedSnapshots
+            fetchedSnapshots: fetchedSnapshots,
+            includeSecondary: AIUsageSettingsStore.showSecondaryLimits()
         )
     }
 }
@@ -545,7 +609,6 @@ enum AIUsageFetcher {
              "codex",
              "copilot",
              "minimax",
-             "cursor",
              "amp",
              "zai":
             true
@@ -585,29 +648,14 @@ enum AIUsageFetcher {
             await CopilotUsageAPIClient.fetchSnapshot(for: provider)
         case "minimax":
             await MiniMaxUsageAPIClient.fetchSnapshot(for: provider)
-        case "cursor":
-            await CursorUsageAPIClient.fetchSnapshot(for: provider)
         case "amp":
             await AmpUsageAPIClient.fetchSnapshot(for: provider)
         case "zai":
             await ZaiUsageAPIClient.fetchSnapshot(for: provider)
-        case "opencode":
-            AIProviderUsageSnapshot(
-                providerID: provider.providerID,
-                providerName: provider.providerName,
-                providerIconName: provider.providerIconName,
-                state: .unavailable(message: "No usage data"),
-                rows: []
-            )
         case "gemini",
              "opencode-go",
-             "windsurf",
              "kimi",
-             "kiro",
-             "antigravity",
-             "factory",
-             "jetbrains-ai-assistant",
-             "perplexity":
+             "factory":
             AIProviderUsageSnapshot(
                 providerID: provider.providerID,
                 providerName: provider.providerName,

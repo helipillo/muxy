@@ -304,10 +304,6 @@ struct SidebarFooter: View {
         notificationStore.unreadCount > 0 ? "bell.badge" : "bell"
     }
 
-    private var aiUsageIcon: String {
-        usageService.isRefreshing ? "arrow.clockwise" : "sparkles"
-    }
-
     private var previewProviderDisplay: (percent: Int, iconName: String)? {
         guard let snapshot = usageService.previewProviderSnapshot,
               case .available = snapshot.state
@@ -333,7 +329,6 @@ struct SidebarFooter: View {
         AIUsagePreviewButton(
             display: previewProviderDisplay,
             percentLabel: previewProviderPercentLabel,
-            isRefreshing: usageService.isRefreshing,
             expanded: expanded,
             onTap: { showAIUsagePopover.toggle() }
         )
@@ -400,7 +395,6 @@ struct SidebarFooter: View {
 private struct AIUsagePreviewButton: View {
     let display: (percent: Int, iconName: String)?
     let percentLabel: String?
-    let isRefreshing: Bool
     let expanded: Bool
     let onTap: () -> Void
 
@@ -408,10 +402,6 @@ private struct AIUsagePreviewButton: View {
 
     private var foreground: Color {
         hovered ? MuxyTheme.fg : MuxyTheme.fgMuted
-    }
-
-    private var background: Color {
-        hovered ? MuxyTheme.hover : Color.clear
     }
 
     var body: some View {
@@ -423,8 +413,7 @@ private struct AIUsagePreviewButton: View {
                     compactLabel
                 }
             }
-            .background(background, in: RoundedRectangle(cornerRadius: 8))
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
@@ -433,49 +422,31 @@ private struct AIUsagePreviewButton: View {
 
     private var expandedLabel: some View {
         HStack(spacing: 4) {
-            if isRefreshing {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(foreground)
-            } else if let display, let percentLabel {
-                ProviderIconView(iconName: display.iconName, size: 13, style: .monochrome(foreground))
+            iconGlyph
+            if let percentLabel {
                 Text(percentLabel)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(foreground)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-            } else {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(foreground)
             }
         }
         .frame(height: 24)
-        .padding(.horizontal, 6)
+    }
+
+    private var compactLabel: some View {
+        iconGlyph
+            .frame(width: 24, height: 24)
     }
 
     @ViewBuilder
-    private var compactLabel: some View {
-        if isRefreshing {
-            Image(systemName: "arrow.clockwise")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(foreground)
-                .frame(width: 24, height: 24)
-        } else if let display, let percentLabel {
-            VStack(spacing: 1) {
-                ProviderIconView(iconName: display.iconName, size: 13, style: .monochrome(foreground))
-                Text(percentLabel)
-                    .font(.system(size: 7.5, weight: .semibold))
-                    .foregroundStyle(foreground)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            .frame(width: 24, height: 24)
+    private var iconGlyph: some View {
+        if let display {
+            ProviderIconView(iconName: display.iconName, size: 14, style: .monochrome(foreground))
         } else {
             Image(systemName: "sparkles")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(foreground)
-                .frame(width: 24, height: 24)
         }
     }
 }
@@ -503,18 +474,22 @@ private struct AIUsagePanel: View {
                     .foregroundStyle(MuxyTheme.fgMuted)
                 Spacer()
                 Button(action: onRefresh) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 9, weight: .semibold))
+                    Group {
+                        if isRefreshing {
+                            ProgressView()
+                                .controlSize(.mini)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
+                    }
+                    .frame(width: 10, height: 10)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(MuxyTheme.fgMuted)
                 .disabled(isRefreshing)
                 .help("Refresh usage")
-                if isRefreshing {
-                    ProgressView()
-                        .controlSize(.small)
-                        .scaleEffect(0.65)
-                } else if let lastRefreshDate {
+                if let lastRefreshDate {
                     Text(Self.relativeFormatter.localizedString(for: lastRefreshDate, relativeTo: Date()))
                         .font(.system(size: 9))
                         .foregroundStyle(MuxyTheme.fgDim)
@@ -547,8 +522,7 @@ private struct AIProviderUsageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                ProviderIconView(iconName: snapshot.providerIconName, size: 14)
-                    .opacity(0.8)
+                ProviderIconView(iconName: snapshot.providerIconName, size: 12, style: .monochrome(MuxyTheme.fg))
                 Text(snapshot.providerName)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(MuxyTheme.fg)

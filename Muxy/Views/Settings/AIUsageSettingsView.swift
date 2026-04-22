@@ -3,6 +3,8 @@ import SwiftUI
 struct AIUsageSettingsView: View {
     @State private var usageService = AIUsageService.shared
     @AppStorage(AIUsageSettingsStore.usageEnabledKey) private var usageEnabled = false
+    @AppStorage(AIUsageSettingsStore.showSecondaryLimitsKey) private var showSecondaryLimits = AIUsageSettingsStore
+        .defaultShowSecondaryLimits
     @State private var usageDisplayMode = AIUsageSettingsStore.usageDisplayMode()
     @State private var autoRefreshInterval = AIUsageSettingsStore.autoRefreshInterval()
 
@@ -53,6 +55,9 @@ struct AIUsageSettingsView: View {
         }
         .onChange(of: autoRefreshInterval) { _, newValue in
             AIUsageSettingsStore.setAutoRefreshInterval(newValue)
+        }
+        .onChange(of: showSecondaryLimits) { _, _ in
+            usageService.recomposeSnapshots()
         }
     }
 
@@ -110,6 +115,28 @@ struct AIUsageSettingsView: View {
             Divider().padding(.horizontal, 12)
 
             HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show Secondary Limits")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("Display weekly and monthly quotas alongside the primary session usage.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Toggle("", isOn: $showSecondaryLimits)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .scaleEffect(0.9)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
+
+            Divider().padding(.horizontal, 12)
+
+            HStack(spacing: 8) {
                 Text("Choose which providers appear on the usage board.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
@@ -148,7 +175,7 @@ struct AIUsageSettingsView: View {
 
     private func providerCell(_ provider: AIUsageProviderCatalogEntry) -> some View {
         HStack(spacing: 8) {
-            ProviderIconView(iconName: provider.iconName, size: 16)
+            ProviderIconView(iconName: provider.iconName, size: 16, style: .monochrome(.primary))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(provider.displayName)

@@ -42,7 +42,6 @@ final class AIProviderRegistry {
 
     let providers: [AIProviderIntegration] = [
         ClaudeCodeProvider(),
-        OpenCodeProvider(),
     ]
 
     private init() {}

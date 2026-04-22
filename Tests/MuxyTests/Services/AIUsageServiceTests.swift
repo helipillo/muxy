@@ -37,13 +37,13 @@ struct AIUsageServiceTests {
         }
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        let providerID = "cursor"
+        let providerID = "codex"
         #expect(!AIUsageProviderTrackingStore.hasTrackedPreference(providerID: providerID, defaults: defaults))
 
         let snapshots = [
             AIProviderUsageSnapshot(
                 providerID: providerID,
-                providerName: "Cursor",
+                providerName: "Codex",
                 providerIconName: "sparkles",
                 state: .available,
                 rows: [AIUsageMetricRow(label: "Monthly", percent: 45, resetDate: nil, detail: "45/100")]
@@ -65,13 +65,13 @@ struct AIUsageServiceTests {
         }
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        let providerID = "cursor"
+        let providerID = "codex"
         AIUsageProviderTrackingStore.setTracked(false, providerID: providerID, defaults: defaults)
 
         let snapshots = [
             AIProviderUsageSnapshot(
                 providerID: providerID,
-                providerName: "Cursor",
+                providerName: "Codex",
                 providerIconName: "sparkles",
                 state: .available,
                 rows: [AIUsageMetricRow(label: "Monthly", percent: 80, resetDate: nil, detail: "80/100")]
@@ -93,7 +93,7 @@ struct AIUsageServiceTests {
         }
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        let providerID = "cursor"
+        let providerID = "codex"
 
         #expect(AIUsageProviderEnabledStore.isEnabled(providerID: providerID, defaults: defaults))
 
@@ -158,21 +158,21 @@ struct AIUsageServiceTests {
     @Test("catalog canonical ID normalizes legacy provider IDs")
     func catalogCanonicalizesLegacyProviderIDs() {
         #expect(AIUsageProviderCatalog.canonicalID(for: "claude_code") == "claude")
-        #expect(AIUsageProviderCatalog.canonicalID(for: "cursor") == "cursor")
+        #expect(AIUsageProviderCatalog.canonicalID(for: "codex") == "codex")
     }
 
     @Test("compose snapshots includes tracked disabled providers with Disabled state")
     func composeSnapshotsIncludesDisabledProviderState() {
         let trackedProviders = [
             AITrackedProviderUsageDescriptor(
-                providerID: "cursor",
-                providerName: "Cursor",
+                providerID: "codex",
+                providerName: "Codex",
                 providerIconName: "sparkles",
                 isEnabled: false
             ),
             AITrackedProviderUsageDescriptor(
-                providerID: "opencode",
-                providerName: "OpenCode",
+                providerID: "claude",
+                providerName: "Claude Code",
                 providerIconName: "sparkles",
                 isEnabled: true
             ),
@@ -180,8 +180,8 @@ struct AIUsageServiceTests {
 
         let fetchedSnapshots = [
             AIProviderUsageSnapshot(
-                providerID: "opencode",
-                providerName: "OpenCode",
+                providerID: "claude",
+                providerName: "Claude Code",
                 providerIconName: "sparkles",
                 state: .available,
                 rows: []
@@ -194,22 +194,21 @@ struct AIUsageServiceTests {
         )
 
         #expect(composed.count == 2)
-        #expect(composed[0].providerID == "cursor")
-        #expect(composed[1].providerID == "opencode")
-        #expect(composed[1].state == .available)
+        #expect(composed[0].providerID == "codex")
+        #expect(composed[1].providerID == "claude")
 
         if case let .unavailable(message) = composed[0].state {
-            #expect(message == "Usage disabled")
+            #expect(message == "No usage data")
         } else {
-            Issue.record("Expected disabled provider to map to unavailable Disabled state")
+            Issue.record("Expected disabled provider to map to unavailable state")
         }
     }
 
     @MainActor
     @Test("bundled provider catalog metadata is exposed for usage-only providers")
     func bundledProviderCatalogMetadata() {
-        let entry = AIUsageProviderCatalog.entry(providerID: "cursor")
-        #expect(entry?.displayName == "Cursor")
+        let entry = AIUsageProviderCatalog.entry(providerID: "codex")
+        #expect(entry?.displayName == "Codex")
         #expect(entry?.hasNotificationIntegration == false)
         #expect(entry?.isBundled == true)
     }

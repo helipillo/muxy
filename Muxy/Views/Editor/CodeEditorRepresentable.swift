@@ -315,6 +315,7 @@ struct CodeEditorView: NSViewRepresentable {
 
         if backingStoreChanged || incrementalFinished {
             coordinator.updateContainerHeight()
+            coordinator.updateMarkdownEditorScrollMetrics()
         }
 
         if !coordinator.hasAppliedInitialContent, viewport.backingStore.lineCount > 1 || backingStoreChanged {
@@ -335,6 +336,7 @@ struct CodeEditorView: NSViewRepresentable {
                 bottomInset: textView.textContainerInset.height
             )
             coordinator.updateContainerHeight()
+            coordinator.updateMarkdownEditorScrollMetrics()
             coordinator.refreshViewport(force: true)
         }
 
@@ -349,6 +351,7 @@ struct CodeEditorView: NSViewRepresentable {
 
         updateSearchViewport(coordinator: coordinator)
         coordinator.syncMarkdownScrollPositionIfNeeded()
+        coordinator.updateMarkdownEditorScrollMetrics()
         coordinator.updateMarkdownPreviewScrollProgress()
 
         if coordinator.lastEditorFocusVersion != editorFocusVersion {
@@ -608,6 +611,7 @@ struct CodeEditorView: NSViewRepresentable {
             let height = max(viewport.totalDocumentHeight, scrollView.contentView.bounds.height)
             let width = max(scrollView.contentSize.width, textView?.frame.width ?? scrollView.contentSize.width)
             container.frame = NSRect(x: 0, y: 0, width: width, height: height)
+            updateMarkdownEditorScrollMetrics()
             let maxScrollY = max(0, height - scrollView.contentView.bounds.height)
             if scrollView.contentView.bounds.origin.y > maxScrollY {
                 scrollView.contentView.setBoundsOrigin(NSPoint(x: scrollView.contentView.bounds.origin.x, y: maxScrollY))
@@ -1056,6 +1060,7 @@ struct CodeEditorView: NSViewRepresentable {
                 name: NSView.frameDidChangeNotification,
                 object: scrollView.contentView
             )
+            updateMarkdownEditorScrollMetrics()
             updateMarkdownPreviewScrollProgress()
         }
 
@@ -1094,6 +1099,7 @@ struct CodeEditorView: NSViewRepresentable {
                 }
                 lastObservedClipSize = size
             }
+            updateMarkdownEditorScrollMetrics()
             if isApplyingMarkdownScroll {
                 isApplyingMarkdownScroll = false
             } else {
@@ -1114,9 +1120,26 @@ struct CodeEditorView: NSViewRepresentable {
                 }
                 lastObservedClipSize = size
             }
+            updateMarkdownEditorScrollMetrics()
             if !isEditingViewport {
                 refreshViewport(force: false)
             }
+        }
+
+        func updateMarkdownEditorScrollMetrics() {
+            guard state.isMarkdownFile,
+                  state.markdownViewMode == .split,
+                  state.markdownScrollSyncEnabled,
+                  let scrollView
+            else { return }
+
+            let visibleHeight = scrollView.contentView.bounds.height
+            let documentHeight = scrollView.documentView?.bounds.height ?? 0
+            let maxScrollY = max(0, documentHeight - visibleHeight)
+            let scrollY = min(max(0, scrollView.contentView.bounds.origin.y), maxScrollY)
+
+            state.markdownEditorScrollY = scrollY
+            state.markdownEditorMaxScrollY = maxScrollY
         }
 
         func syncMarkdownScrollPositionIfNeeded() {

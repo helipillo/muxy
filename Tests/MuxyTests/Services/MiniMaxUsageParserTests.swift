@@ -138,13 +138,13 @@ struct MiniMaxUsageParserTests {
 
     @Test("reads minimax token from env")
     func readTokenFromEnv() throws {
-        let token = try MiniMaxUsageAPIClient.readToken(env: ["MINIMAX_API_KEY": "mmx-key"])
+        let token = try MiniMaxUsageProvider.readToken(env: ["MINIMAX_API_KEY": "mmx-key"])
         #expect(token == "mmx-key")
     }
 
     @Test("prefers CN key when present")
     func readTokenPrefersCNKey() throws {
-        let token = try MiniMaxUsageAPIClient.readToken(env: [
+        let token = try MiniMaxUsageProvider.readToken(env: [
             "MINIMAX_API_KEY": "global-key",
             "MINIMAX_CN_API_KEY": "cn-key",
         ])

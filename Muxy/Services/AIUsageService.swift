@@ -13,12 +13,6 @@ private func canonicalAIUsageProviderID(_ providerID: String) -> String {
     }
 }
 
-struct AIProviderUsageDescriptor {
-    let providerID: String
-    let providerName: String
-    let providerIconName: String
-}
-
 struct AITrackedProviderUsageDescriptor: Equatable {
     let providerID: String
     let providerName: String
@@ -213,24 +207,20 @@ struct AIUsageProviderCatalogEntry: Identifiable, Equatable {
 @MainActor
 enum AIUsageProviderCatalog {
     static let providers: [AIUsageProviderCatalogEntry] = {
-        let notificationProviders = AIProviderRegistry.shared.providers.map {
-            AIUsageProviderCatalogEntry(
-                id: canonicalAIUsageProviderID($0.id),
-                displayName: $0.displayName,
-                iconName: $0.iconName,
-                source: .notificationIntegration
+        let notificationIDs = Set(AIProviderRegistry.shared.providers.map { canonicalAIUsageProviderID($0.id) })
+
+        return AIProviderRegistry.shared.usageProviders.map { provider in
+            let canonicalID = canonicalAIUsageProviderID(provider.id)
+            return AIUsageProviderCatalogEntry(
+                id: canonicalID,
+                displayName: provider.displayName,
+                iconName: provider.iconName,
+                source: notificationIDs.contains(canonicalID) ? .notificationIntegration : .bundled
             )
         }
-
-        var byID = Dictionary(uniqueKeysWithValues: notificationProviders.map { ($0.id, $0) })
-        for provider in bundledSeedProviders where byID[provider.id] == nil {
-            byID[provider.id] = provider
-        }
-
-        let notificationProviderIDs = Set(notificationProviders.map(\.id))
-        return byID.values.sorted { lhs, rhs in
-            let lhsIntegrated = notificationProviderIDs.contains(lhs.id)
-            let rhsIntegrated = notificationProviderIDs.contains(rhs.id)
+        .sorted { lhs, rhs in
+            let lhsIntegrated = lhs.hasNotificationIntegration
+            let rhsIntegrated = rhs.hasNotificationIntegration
             if lhsIntegrated != rhsIntegrated {
                 return lhsIntegrated
             }
@@ -239,7 +229,7 @@ enum AIUsageProviderCatalog {
     }()
 
     private static let providerByID: [String: AIUsageProviderCatalogEntry] =
-        Dictionary(uniqueKeysWithValues: providers.map { (canonicalAIUsageProviderID($0.id), $0) })
+        Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0) })
 
     private static let notificationProviderByID: [String: any AIProviderIntegration] =
         Dictionary(uniqueKeysWithValues: AIProviderRegistry.shared.providers.map { (canonicalAIUsageProviderID($0.id), $0) })
@@ -251,18 +241,6 @@ enum AIUsageProviderCatalog {
     static func notificationProvider(providerID: String) -> (any AIProviderIntegration)? {
         notificationProviderByID[canonicalAIUsageProviderID(providerID)]
     }
-
-    private static let bundledSeedProviders: [AIUsageProviderCatalogEntry] = [
-        .init(id: "codex", displayName: "Codex", iconName: "codex", source: .bundled),
-        .init(id: "copilot", displayName: "Copilot", iconName: "copilot", source: .bundled),
-        .init(id: "gemini", displayName: "Gemini", iconName: "gemini", source: .bundled),
-        .init(id: "minimax", displayName: "MiniMax", iconName: "minimax", source: .bundled),
-        .init(id: "opencode-go", displayName: "OpenCode Go", iconName: "opencode-go", source: .bundled),
-        .init(id: "kimi", displayName: "Kimi", iconName: "kimi", source: .bundled),
-        .init(id: "amp", displayName: "Amp", iconName: "amp", source: .bundled),
-        .init(id: "factory", displayName: "Factory", iconName: "factory", source: .bundled),
-        .init(id: "zai", displayName: "Z.ai", iconName: "zai", source: .bundled),
-    ]
 
     static func canonicalID(for providerID: String) -> String {
         canonicalAIUsageProviderID(providerID)
@@ -359,33 +337,6 @@ enum AIUsageRowPolicy {
     }
 }
 
-enum AIUsageSnapshotMerger {
-    static func merge(
-        nativeSnapshots: [AIProviderUsageSnapshot],
-        openUsageSnapshots: [AIProviderUsageSnapshot]
-    ) -> [AIProviderUsageSnapshot] {
-        var byID = Dictionary(uniqueKeysWithValues: nativeSnapshots.map { (canonicalAIUsageProviderID($0.providerID), $0) })
-
-        for snapshot in openUsageSnapshots {
-            let key = canonicalAIUsageProviderID(snapshot.providerID)
-            guard let existing = byID[key] else {
-                byID[key] = snapshot
-                continue
-            }
-
-            switch existing.state {
-            case .available:
-                continue
-            case .unavailable,
-                 .error:
-                byID[key] = snapshot
-            }
-        }
-
-        return Array(byID.values)
-    }
-}
-
 @MainActor
 @Observable
 final class AIUsageService {
@@ -409,7 +360,6 @@ final class AIUsageService {
         return max(0, min(100, maxPercent))
     }
 
-    /// The provider with the highest current usage percentage.
     var mostUsedProviderSnapshot: AIProviderUsageSnapshot? {
         snapshots
             .filter { snapshot in
@@ -421,10 +371,6 @@ final class AIUsageService {
             }
     }
 
-    /// Snapshot used for the sidebar footer preview.
-    ///
-    /// - With previous data: provider with the largest change in used % since last refresh.
-    /// - Without previous data: provider with the highest used %.
     var previewProviderSnapshot: AIProviderUsageSnapshot? {
         if previousSnapshotsCache.isEmpty {
             return mostUsedProviderSnapshot
@@ -514,18 +460,8 @@ final class AIUsageService {
 
         let catalogProviders = AIUsageProviderCatalog.providers
         let preferences = ProviderRuntimePreferences(catalogProviders: catalogProviders)
-
-        let enabledProviderDescriptors = catalogProviders.compactMap { provider -> AIProviderUsageDescriptor? in
-            guard preferences.enabledByProviderID[provider.id] == true else { return nil }
-            return AIProviderUsageDescriptor(
-                providerID: provider.id,
-                providerName: provider.displayName,
-                providerIconName: provider.iconName
-            )
-        }
-
-        let nativeProviderDescriptors = enabledProviderDescriptors.filter {
-            AIUsageFetcher.supportsNativeCollector(providerID: $0.providerID)
+        let enabledProviders = AIProviderRegistry.shared.usageProviders.filter { provider in
+            preferences.enabledByProviderID[canonicalAIUsageProviderID(provider.id)] == true
         }
 
         isRefreshing = true
@@ -534,14 +470,8 @@ final class AIUsageService {
             refreshTask = nil
         }
 
-        let task = Task { [nativeProviderDescriptors, enabledProviderDescriptors] in
-            async let nativeSnapshots = AIUsageFetcher.fetchSnapshots(for: nativeProviderDescriptors)
-            async let openUsageSnapshots = OpenUsageAPIClient.fetchSnapshots(for: enabledProviderDescriptors)
-
-            return await AIUsageSnapshotMerger.merge(
-                nativeSnapshots: nativeSnapshots,
-                openUsageSnapshots: openUsageSnapshots
-            )
+        let task = Task<[AIProviderUsageSnapshot], Never>.detached(priority: .userInitiated) {
+            await AIUsageService.fetchSnapshots(for: enabledProviders)
         }
 
         refreshTask = task
@@ -559,6 +489,23 @@ final class AIUsageService {
             snapshots = composedSnapshots
         }
         lastRefreshDate = Date()
+    }
+
+    private static func fetchSnapshots(for providers: [any AIUsageProvider]) async -> [AIProviderUsageSnapshot] {
+        await withTaskGroup(of: (Int, AIProviderUsageSnapshot).self) { group in
+            for (index, provider) in providers.enumerated() {
+                group.addTask {
+                    await (index, provider.fetchUsageSnapshot())
+                }
+            }
+
+            var indexed: [(Int, AIProviderUsageSnapshot)] = []
+            indexed.reserveCapacity(providers.count)
+            for await pair in group {
+                indexed.append(pair)
+            }
+            return indexed.sorted { $0.0 < $1.0 }.map(\.1)
+        }
     }
 
     private func shouldRefresh(at date: Date) -> Bool {
@@ -600,364 +547,4 @@ final class AIUsageService {
             includeSecondary: AIUsageSettingsStore.showSecondaryLimits()
         )
     }
-}
-
-enum AIUsageFetcher {
-    static func supportsNativeCollector(providerID: String) -> Bool {
-        switch canonicalAIUsageProviderID(providerID) {
-        case "claude",
-             "codex",
-             "copilot",
-             "minimax",
-             "amp",
-             "zai":
-            true
-        default:
-            false
-        }
-    }
-
-    static func fetchSnapshots(for providers: [AIProviderUsageDescriptor]) async -> [AIProviderUsageSnapshot] {
-        await withTaskGroup(of: (Int, AIProviderUsageSnapshot).self) { group in
-            for (index, provider) in providers.enumerated() {
-                group.addTask {
-                    await (index, fetchSnapshot(for: provider))
-                }
-            }
-
-            var indexedSnapshots: [(Int, AIProviderUsageSnapshot)] = []
-            indexedSnapshots.reserveCapacity(providers.count)
-
-            for await indexed in group {
-                indexedSnapshots.append(indexed)
-            }
-
-            return indexedSnapshots
-                .sorted { $0.0 < $1.0 }
-                .map(\.1)
-        }
-    }
-
-    private static func fetchSnapshot(for provider: AIProviderUsageDescriptor) async -> AIProviderUsageSnapshot {
-        switch provider.providerID {
-        case "claude":
-            await ClaudeUsageAPIClient.fetchSnapshot(for: provider)
-        case "codex":
-            await CodexUsageAPIClient.fetchSnapshot(for: provider)
-        case "copilot":
-            await CopilotUsageAPIClient.fetchSnapshot(for: provider)
-        case "minimax":
-            await MiniMaxUsageAPIClient.fetchSnapshot(for: provider)
-        case "amp":
-            await AmpUsageAPIClient.fetchSnapshot(for: provider)
-        case "zai":
-            await ZaiUsageAPIClient.fetchSnapshot(for: provider)
-        case "gemini",
-             "opencode-go",
-             "kimi",
-             "factory":
-            AIProviderUsageSnapshot(
-                providerID: provider.providerID,
-                providerName: provider.providerName,
-                providerIconName: provider.providerIconName,
-                state: .unavailable(message: "Native usage collector not implemented yet"),
-                rows: []
-            )
-        default:
-            AIProviderUsageSnapshot(
-                providerID: provider.providerID,
-                providerName: provider.providerName,
-                providerIconName: provider.providerIconName,
-                state: .unavailable(message: "Unsupported provider"),
-                rows: []
-            )
-        }
-    }
-}
-
-enum OpenUsageAPIClient {
-    private static let endpointURL: URL? = URL(string: "http://127.0.0.1:6736/v1/usage")
-    private static let session: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 1.5
-        configuration.timeoutIntervalForResource = 2
-        configuration.waitsForConnectivity = false
-        return URLSession(configuration: configuration)
-    }()
-
-    static func fetchSnapshots(for providers: [AIProviderUsageDescriptor]) async -> [AIProviderUsageSnapshot] {
-        do {
-            guard let url = endpointURL else { return [] }
-            var request = URLRequest(url: url)
-            request.httpMethod = "GET"
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.timeoutInterval = 1.5
-
-            let (data, response) = try await session.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                return []
-            }
-            guard (200 ..< 300).contains(httpResponse.statusCode) else {
-                usageLogger.info("OpenUsage bridge returned status \(httpResponse.statusCode)")
-                return []
-            }
-
-            return try parseSnapshots(from: data, providers: providers)
-        } catch {
-            return []
-        }
-    }
-
-    private static func parseSnapshots(
-        from data: Data,
-        providers: [AIProviderUsageDescriptor]
-    ) throws -> [AIProviderUsageSnapshot] {
-        guard let rawSnapshots = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            return []
-        }
-
-        let providerByID = Dictionary(uniqueKeysWithValues: providers.map { (canonicalAIUsageProviderID($0.providerID), $0) })
-
-        return rawSnapshots.compactMap { rawSnapshot in
-            guard let providerID = extractString(from: rawSnapshot, keys: ["providerId", "provider_id", "provider", "id"]),
-                  !providerID.isEmpty
-            else {
-                return nil
-            }
-
-            let canonicalProviderID = canonicalAIUsageProviderID(providerID)
-            let providerInfo = providerByID[canonicalProviderID]
-
-            let providerName = providerInfo?.providerName
-                ?? extractString(from: rawSnapshot, keys: ["displayName", "providerName", "provider_name", "name", "title"])
-                ?? providerID
-            let providerIcon = providerInfo?.providerIconName ?? "sparkles"
-
-            let rawLines = extractArray(from: rawSnapshot, keys: ["lines", "rows", "metrics", "usage"])
-            let rows = rawLines.compactMap { mapMetricRow(from: $0) }
-
-            let state: AIProviderUsageState = rows.isEmpty
-                ? .unavailable(message: "No usage data")
-                : .available
-
-            return AIProviderUsageSnapshot(
-                providerID: canonicalProviderID,
-                providerName: providerName,
-                providerIconName: providerIcon,
-                state: state,
-                rows: rows
-            )
-        }
-    }
-
-    private static func mapMetricRow(from rawLine: [String: Any]) -> AIUsageMetricRow? {
-        let lineType = (extractString(from: rawLine, keys: ["type", "kind", "lineType"]) ?? "text")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-
-        let label = extractString(from: rawLine, keys: ["label", "name", "title"]) ?? "Usage"
-        let resetDate = extractDate(from: rawLine, keys: ["resetsAt", "resetAt", "resetDate"])
-
-        if lineType == "progress" ||
-            (extractDouble(from: rawLine, keys: ["used"]) != nil && extractDouble(from: rawLine, keys: ["limit"]) != nil)
-        {
-            let used = extractDouble(from: rawLine, keys: ["used", "current", "value"])
-            let limit = extractDouble(from: rawLine, keys: ["limit", "max", "total"])
-
-            let percent: Double? = if let used, let limit, limit > 0 {
-                max(0, min(100, (used / limit) * 100))
-            } else {
-                nil
-            }
-
-            let detail: String? = if let used, let limit {
-                "\(formatUsageNumber(used))/\(formatUsageNumber(limit))"
-            } else {
-                nil
-            }
-
-            return AIUsageMetricRow(label: label, percent: percent, resetDate: resetDate, detail: detail)
-        }
-
-        let detail = extractString(from: rawLine, keys: ["value", "detail", "text", "subtitle"])
-        return AIUsageMetricRow(label: label, percent: nil, resetDate: resetDate, detail: detail)
-    }
-
-    private static func extractString(from object: [String: Any], keys: [String]) -> String? {
-        for key in keys {
-            guard let value = object[key] else { continue }
-            if let string = value as? String {
-                let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    return trimmed
-                }
-            } else if let number = value as? NSNumber {
-                return number.stringValue
-            }
-        }
-
-        return nil
-    }
-
-    private static func extractDouble(from object: [String: Any], keys: [String]) -> Double? {
-        for key in keys {
-            guard let value = object[key] else { continue }
-            if let number = value as? NSNumber {
-                return number.doubleValue
-            }
-            if let string = value as? String,
-               let parsed = Double(string.trimmingCharacters(in: .whitespacesAndNewlines))
-            {
-                return parsed
-            }
-        }
-
-        return nil
-    }
-
-    private static func extractArray(from object: [String: Any], keys: [String]) -> [[String: Any]] {
-        for key in keys {
-            if let array = object[key] as? [[String: Any]] {
-                return array
-            }
-        }
-
-        return []
-    }
-
-    private static func extractDate(from object: [String: Any], keys: [String]) -> Date? {
-        let fractionalFormatter = ISO8601DateFormatter()
-        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        let standardFormatter = ISO8601DateFormatter()
-        standardFormatter.formatOptions = [.withInternetDateTime]
-
-        for key in keys {
-            guard let value = object[key] else { continue }
-
-            if let string = value as? String {
-                if let parsed = fractionalFormatter.date(from: string)
-                    ?? standardFormatter.date(from: string)
-                {
-                    return parsed
-                }
-            }
-
-            if let number = value as? NSNumber {
-                let raw = number.doubleValue
-                let seconds = raw > 10_000_000_000 ? raw / 1000 : raw
-                return Date(timeIntervalSince1970: seconds)
-            }
-        }
-
-        return nil
-    }
-
-    private static func formatUsageNumber(_ value: Double) -> String {
-        let rounded = value.rounded()
-        if abs(rounded - value) < 0.000_001 {
-            return String(Int(rounded))
-        }
-
-        return String(format: "%.1f", value)
-    }
-}
-
-enum ClaudeUsageAPIClient {
-    private static let credentialsPath = NSHomeDirectory() + "/.claude/.credentials.json"
-    private static let endpointURL: URL? = URL(string: "https://api.anthropic.com/api/oauth/usage")
-
-    static func fetchSnapshot(for provider: AIProviderUsageDescriptor) async -> AIProviderUsageSnapshot {
-        do {
-            let token = try readAccessToken()
-
-            guard let url = endpointURL else { throw ClaudeUsageError.missingAccessToken }
-            var request = URLRequest(url: url)
-            request.httpMethod = "GET"
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw ClaudeUsageError.invalidResponse
-            }
-            guard (200 ..< 300).contains(httpResponse.statusCode) else {
-                throw ClaudeUsageError.httpStatus(httpResponse.statusCode)
-            }
-
-            let rows = try ClaudeUsageParser.parseMetricRows(from: data)
-            if rows.isEmpty {
-                return AIProviderUsageSnapshot(
-                    providerID: provider.providerID,
-                    providerName: provider.providerName,
-                    providerIconName: provider.providerIconName,
-                    state: .unavailable(message: "No usage data"),
-                    rows: []
-                )
-            }
-
-            return AIProviderUsageSnapshot(
-                providerID: provider.providerID,
-                providerName: provider.providerName,
-                providerIconName: provider.providerIconName,
-                state: .available,
-                rows: rows
-            )
-        } catch ClaudeUsageError.missingAccessToken {
-            return AIProviderUsageSnapshot(
-                providerID: provider.providerID,
-                providerName: provider.providerName,
-                providerIconName: provider.providerIconName,
-                state: .unavailable(message: "Sign in to Claude"),
-                rows: []
-            )
-        } catch let ClaudeUsageError.httpStatus(statusCode) {
-            usageLogger.error("Claude usage request failed with status \(statusCode)")
-            return AIProviderUsageSnapshot(
-                providerID: provider.providerID,
-                providerName: provider.providerName,
-                providerIconName: provider.providerIconName,
-                state: .error(message: "Usage request failed"),
-                rows: []
-            )
-        } catch {
-            usageLogger.error("Claude usage request failed: \(error.localizedDescription)")
-            return AIProviderUsageSnapshot(
-                providerID: provider.providerID,
-                providerName: provider.providerName,
-                providerIconName: provider.providerIconName,
-                state: .error(message: "Unable to fetch usage"),
-                rows: []
-            )
-        }
-    }
-
-    private static func readAccessToken() throws -> String {
-        guard FileManager.default.fileExists(atPath: credentialsPath) else {
-            throw ClaudeUsageError.missingAccessToken
-        }
-
-        let fileURL = URL(fileURLWithPath: credentialsPath)
-        let data = try Data(contentsOf: fileURL)
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let oauth = root["claudeAiOauth"] as? [String: Any],
-              let accessToken = oauth["accessToken"] as? String
-        else {
-            throw ClaudeUsageError.missingAccessToken
-        }
-
-        let token = accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty else {
-            throw ClaudeUsageError.missingAccessToken
-        }
-        return token
-    }
-}
-
-enum ClaudeUsageError: Error {
-    case missingAccessToken
-    case invalidResponse
-    case httpStatus(Int)
 }

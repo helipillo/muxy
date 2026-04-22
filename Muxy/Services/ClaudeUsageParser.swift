@@ -5,11 +5,20 @@ enum ClaudeUsageParserError: Error {
 }
 
 enum ClaudeUsageParser {
-    private static let windowDefinitions: [(key: String, label: String)] = [
-        ("five_hour", "5h"),
-        ("seven_day", "7d"),
-        ("seven_day_opus", "7d Opus"),
-        ("seven_day_omelette", "7d Omelette"),
+    private static let fiveHourDuration: TimeInterval = 5 * 60 * 60
+    private static let sevenDayDuration: TimeInterval = 7 * 24 * 60 * 60
+
+    private struct Window {
+        let key: String
+        let label: String
+        let period: TimeInterval
+    }
+
+    private static let windowDefinitions: [Window] = [
+        Window(key: "five_hour", label: "5h", period: fiveHourDuration),
+        Window(key: "seven_day", label: "7d", period: sevenDayDuration),
+        Window(key: "seven_day_sonnet", label: "7d Sonnet", period: sevenDayDuration),
+        Window(key: "seven_day_omelette", label: "7d Omelette", period: sevenDayDuration),
     ]
 
     static func parseMetricRows(from data: Data) throws -> [AIUsageMetricRow] {
@@ -18,92 +27,45 @@ enum ClaudeUsageParser {
         }
 
         var rows: [AIUsageMetricRow] = []
-        rows.reserveCapacity(windowDefinitions.count)
+        rows.reserveCapacity(windowDefinitions.count + 1)
 
         for definition in windowDefinitions {
             guard let window = payload[definition.key] as? [String: Any] else { continue }
 
-            let used = number(in: window, keys: ["used", "usage", "consumed", "current"])
-            let limit = number(in: window, keys: ["limit", "max", "quota", "total"])
-            let percent = utilizationPercent(used: used, limit: limit)
-            let resetDate = date(in: window, keys: ["reset_at", "resets_at", "resetAt", "reset", "window_end"])
-            let detail = usageDetail(used: used, limit: limit)
+            let percent = AIUsageParserSupport.number(in: window, keys: ["utilization", "used_percent", "usedPercent"])
+                .map { max(0, min(100, $0)) }
+            let resetDate = AIUsageParserSupport.date(in: window, keys: ["resets_at", "reset_at", "resetAt", "window_end"])
 
-            guard percent != nil || resetDate != nil || detail != nil else { continue }
+            guard percent != nil || resetDate != nil else { continue }
 
+            let detail: String? = percent.map { "\(AIUsageParserSupport.formatNumber($0))% used" }
             rows.append(
                 AIUsageMetricRow(
                     label: definition.label,
                     percent: percent,
                     resetDate: resetDate,
-                    detail: detail
+                    detail: detail,
+                    periodDuration: definition.period
+                )
+            )
+        }
+
+        if let extra = payload["extra_usage"] as? [String: Any],
+           let used = AIUsageParserSupport.number(in: extra, keys: ["used_credits", "used"])
+        {
+            let limit = AIUsageParserSupport.number(in: extra, keys: ["monthly_limit", "limit"])
+            rows.append(
+                AIUsageMetricRow(
+                    label: "Credits",
+                    percent: nil,
+                    resetDate: nil,
+                    detail: limit
+                        .map { "\(AIUsageParserSupport.currencyDetail(amount: used))/\(AIUsageParserSupport.currencyDetail(amount: $0))" }
+                        ?? AIUsageParserSupport.currencyDetail(amount: used)
                 )
             )
         }
 
         return rows
-    }
-
-    private static func number(in dictionary: [String: Any], keys: [String]) -> Double? {
-        for key in keys {
-            guard let value = dictionary[key] else { continue }
-            switch value {
-            case let number as NSNumber:
-                return number.doubleValue
-            case let string as String:
-                if let parsed = Double(string) {
-                    return parsed
-                }
-            default:
-                continue
-            }
-        }
-        return nil
-    }
-
-    private static func date(in dictionary: [String: Any], keys: [String]) -> Date? {
-        let withFraction = ISO8601DateFormatter()
-        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        let withoutFraction = ISO8601DateFormatter()
-        withoutFraction.formatOptions = [.withInternetDateTime]
-
-        for key in keys {
-            guard let value = dictionary[key] else { continue }
-            if let number = value as? NSNumber {
-                return unixDate(from: number.doubleValue)
-            }
-            if let string = value as? String {
-                if let seconds = Double(string) {
-                    return unixDate(from: seconds)
-                }
-                if let date = withFraction.date(from: string) ?? withoutFraction.date(from: string) {
-                    return date
-                }
-            }
-        }
-        return nil
-    }
-
-    private static func unixDate(from value: Double) -> Date {
-        value > 10_000_000_000 ? Date(timeIntervalSince1970: value / 1000) : Date(timeIntervalSince1970: value)
-    }
-
-    private static func utilizationPercent(used: Double?, limit: Double?) -> Double? {
-        guard let used, let limit, limit > 0 else { return nil }
-        let ratio = used / limit
-        return min(max(ratio * 100, 0), 100)
-    }
-
-    private static func usageDetail(used: Double?, limit: Double?) -> String? {
-        guard let used, let limit else { return nil }
-        return "\(formatNumber(used))/\(formatNumber(limit))"
-    }
-
-    private static func formatNumber(_ value: Double) -> String {
-        if value >= 100 {
-            return String(Int(value.rounded()))
-        }
-        return String(format: "%.1f", value)
     }
 }

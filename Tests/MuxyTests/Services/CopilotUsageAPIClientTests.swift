@@ -3,28 +3,13 @@ import Testing
 
 @testable import Muxy
 
-@Suite("CopilotUsageAPIClient")
-struct CopilotUsageAPIClientTests {
-    @Test("reads token from OpenUsage-copilot keychain payload")
-    func readTokenFromOpenUsageKeychain() throws {
-        let token = try CopilotUsageAPIClient.readToken(
-            env: [:],
-            keychainReader: { service in
-                if service == "OpenUsage-copilot" {
-                    return #"{"token":"ghu_keychain"}"#
-                }
-                return nil
-            }
-        )
-
-        #expect(token == "ghu_keychain")
-    }
-
+@Suite("CopilotUsageProvider")
+struct CopilotUsageProviderTests {
     @Test("reads token from gh CLI keychain base64 payload")
     func readTokenFromGhKeychainBase64() throws {
         let encoded = Data("gho_decoded".utf8).base64EncodedString()
 
-        let token = try CopilotUsageAPIClient.readToken(
+        let token = try CopilotUsageProvider.readToken(
             env: [:],
             keychainReader: { service in
                 if service == "gh:github.com" {
@@ -51,7 +36,7 @@ struct CopilotUsageAPIClientTests {
             )
         ]
 
-        let token = try CopilotUsageAPIClient.readToken(
+        let token = try CopilotUsageProvider.readToken(
             env: [:],
             keychainReader: { _ in nil },
             homeDirectory: home,

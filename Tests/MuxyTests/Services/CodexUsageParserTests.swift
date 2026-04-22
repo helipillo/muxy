@@ -48,7 +48,7 @@ struct CodexUsageParserTests {
 
     @Test("reads codex auth from env and file payload")
     func readAuthFromEnvAndFilePayload() throws {
-        let envAuth = try CodexUsageAPIClient.readAuth(env: [
+        let envAuth = try CodexUsageProvider.readAuth(env: [
             "CODEX_ACCESS_TOKEN": "token-123",
             "CODEX_ACCOUNT_ID": "acct-1",
         ])

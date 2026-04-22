@@ -62,11 +62,11 @@ struct FileTreeView: View {
             .background(rootDropTarget)
         }
         .background(MuxyTheme.bg)
+        .background(keyboardShortcuts)
         .contentShape(Rectangle())
         .focusable()
         .focusEffectDisabled()
         .focused($treeFocused)
-        .background(keyboardShortcuts)
         .task(id: state.rootPath) {
             state.loadRootIfNeeded()
         }
@@ -168,51 +168,48 @@ struct FileTreeView: View {
 
     private var keyboardShortcuts: some View {
         Group {
-            Button("") {
-                guard state.selectedPaths.count == 1, let path = state.selectedPaths.first else { return }
+            shortcutButton(.return, enabled: state.selectedPaths.count == 1) {
+                guard let path = state.selectedPaths.first else { return }
                 commands.beginRename(path: path)
             }
-            .keyboardShortcut(.return, modifiers: [])
-
-            Button("") {
-                let paths = Array(state.selectedPaths)
-                guard !paths.isEmpty else { return }
-                commands.trash(paths: paths)
+            shortcutButton(.delete, enabled: !state.selectedPaths.isEmpty) {
+                commands.trash(paths: Array(state.selectedPaths))
             }
-            .keyboardShortcut(.delete, modifiers: [])
-
-            Button("") {
-                let paths = Array(state.selectedPaths)
-                guard !paths.isEmpty else { return }
-                commands.trash(paths: paths)
+            shortcutButton(.delete, modifiers: [.command], enabled: !state.selectedPaths.isEmpty) {
+                commands.trash(paths: Array(state.selectedPaths))
             }
-            .keyboardShortcut(.delete, modifiers: [.command])
-
-            Button("") {
-                let paths = Array(state.selectedPaths)
-                guard !paths.isEmpty else { return }
-                commands.copyToClipboard(paths: paths)
+            shortcutButton("c", modifiers: [.command], enabled: !state.selectedPaths.isEmpty) {
+                commands.copyToClipboard(paths: Array(state.selectedPaths))
             }
-            .keyboardShortcut("c", modifiers: [.command])
-
-            Button("") {
-                let paths = Array(state.selectedPaths)
-                guard !paths.isEmpty else { return }
-                commands.cutToClipboard(paths: paths)
+            shortcutButton("x", modifiers: [.command], enabled: !state.selectedPaths.isEmpty) {
+                commands.cutToClipboard(paths: Array(state.selectedPaths))
             }
-            .keyboardShortcut("x", modifiers: [.command])
-
-            Button("") {
-                let target = state.selectedFilePath ?? state.rootPath
-                commands.paste(into: target)
+            shortcutButton("v", modifiers: [.command]) {
+                commands.paste(into: state.selectedFilePath ?? state.rootPath)
             }
-            .keyboardShortcut("v", modifiers: [.command])
         }
         .buttonStyle(.plain)
         .opacity(0)
         .frame(width: 0, height: 0)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    private func shortcutButton(
+        _ key: KeyEquivalent,
+        modifiers: EventModifiers = [],
+        enabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button("", action: action)
+            .keyboardShortcut(key, modifiers: modifiers)
+            .disabled(!canHandleShortcuts || !enabled)
+    }
+
+    private var canHandleShortcuts: Bool {
+        guard treeFocused else { return false }
+        guard state.pendingRenamePath == nil, state.pendingNewEntry == nil else { return false }
+        return state.pendingDeletePaths.isEmpty
     }
 
     private var normalizedRootPath: String {

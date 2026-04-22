@@ -94,7 +94,14 @@ struct MainWindow: View {
 
                 ZStack {
                     MuxyTheme.bg
-                    if projectsWithWorkspaces.isEmpty {
+                    if let project = activeProject,
+                       appState.workspaceRoot(for: project.id) == nil,
+                       let worktree = resolvedActiveWorktree(for: project)
+                    {
+                        EmptyProjectPlaceholder(project: project) {
+                            appState.selectWorktree(projectID: project.id, worktree: worktree)
+                        }
+                    } else if projectsWithWorkspaces.isEmpty {
                         WelcomeView()
                     } else if let project = activeProjectWithWorkspace,
                               let activeKey = appState.activeWorktreeKey(for: project.id)
@@ -458,6 +465,10 @@ struct MainWindow: View {
         return project
     }
 
+    private func resolvedActiveWorktree(for project: Project) -> Worktree? {
+        worktreeStore.preferred(for: project.id, matching: appState.activeWorktreeID[project.id])
+    }
+
     private var shortcutDispatcher: ShortcutActionDispatcher {
         ShortcutActionDispatcher(
             appState: appState,
@@ -673,6 +684,11 @@ struct MainWindow: View {
             alert.buttons[1].keyEquivalent = "\u{1b}"
         }
 
+        if kind == .runningProcess {
+            alert.showsSuppressionButton = true
+            alert.suppressionButton?.title = "Don't ask again"
+        }
+
         alert.beginSheetModal(for: window) { response in
             switch kind {
             case .lastTab:
@@ -692,6 +708,9 @@ struct MainWindow: View {
                 }
             case .runningProcess:
                 if response == .alertFirstButtonReturn {
+                    if alert.suppressionButton?.state == .on {
+                        TabCloseConfirmationPreferences.confirmRunningProcess = false
+                    }
                     appState.confirmCloseRunningTab()
                 } else {
                     appState.cancelCloseRunningTab()

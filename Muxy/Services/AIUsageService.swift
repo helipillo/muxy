@@ -341,26 +341,27 @@ final class AIUsageService {
     @ObservationIgnored private var previousSnapshotsCache: [AIProviderUsageSnapshot] = []
 
     var mostActiveProviderSnapshot: AIProviderUsageSnapshot? {
-        guard !previousSnapshotsCache.isEmpty, !snapshots.isEmpty else { return nil }
+        guard !snapshots.isEmpty else { return nil }
 
-        var maxMovement: Double = 0
+        var maxScore: Double = 0
         var mostActive: AIProviderUsageSnapshot?
 
         for current in snapshots {
             guard case .available = current.state else { continue }
             guard let currentPercent = current.rows.first?.percent else { continue }
 
+            let score: Double
             if let previous = previousSnapshotsCache.first(where: { $0.providerID == current.providerID }),
                case .available = previous.state,
                let previousPercent = previous.rows.first?.percent
             {
-                let movement = abs(currentPercent - previousPercent)
-                if movement > maxMovement {
-                    maxMovement = movement
-                    mostActive = current
-                }
-            } else if currentPercent > maxMovement {
-                maxMovement = currentPercent
+                score = abs(currentPercent - previousPercent)
+            } else {
+                score = currentPercent
+            }
+
+            if score > maxScore {
+                maxScore = score
                 mostActive = current
             }
         }

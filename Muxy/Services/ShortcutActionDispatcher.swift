@@ -143,6 +143,14 @@ struct ShortcutActionDispatcher {
             guard AIUsageSettingsStore.isUsageEnabled() else { return false }
             notificationCenter.post(name: .toggleAIUsage, object: nil)
             return true
+        case .navigateBack:
+            guard appState.navigation.canGoBack else { return false }
+            appState.goBack()
+            return true
+        case .navigateForward:
+            guard appState.navigation.canGoForward else { return false }
+            appState.goForward()
+            return true
         case .selectTab1,
              .selectTab2,
              .selectTab3,

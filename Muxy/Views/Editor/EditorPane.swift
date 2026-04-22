@@ -149,7 +149,7 @@ struct EditorPane: View {
     }
 
     private var renderedMarkdownContent: String {
-        _ = state.backingStoreVersion
+        _ = state.previewRefreshVersion
         return state.backingStore?.fullText() ?? ""
     }
 

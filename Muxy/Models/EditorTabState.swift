@@ -43,6 +43,7 @@ final class EditorTabState: Identifiable {
     let projectPath: String
     private(set) var filePath: String
     var backingStoreVersion = 0
+    var previewRefreshVersion = 0
     var isLoading = false
     var isIncrementalLoading = false
     var isModified = false

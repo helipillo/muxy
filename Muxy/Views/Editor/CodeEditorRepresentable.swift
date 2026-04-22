@@ -492,6 +492,7 @@ struct CodeEditorView: NSViewRepresentable {
         private static let viewportUndoCoalesceInterval: CFTimeInterval = 1.0
         private static let undoCommandSelector = #selector(CodeEditorTextView.undo(_:))
         private static let redoCommandSelector = #selector(CodeEditorTextView.redo(_:))
+        private static let previewRefreshDebounceNanos: UInt64 = 250_000_000
         private static let perfLogger = Logger(subsystem: "app.muxy", category: "EditorPerf")
         private static let perfEnabled: Bool = {
             if let env = ProcessInfo.processInfo.environment["MUXY_EDITOR_PERF"] {
@@ -515,6 +516,7 @@ struct CodeEditorView: NSViewRepresentable {
         private var highlightTimingCount = 0
         private var lastRefreshDurationMs: Double = 0
         private var lastHighlightDurationMs: Double = 0
+        private var previewRefreshTask: Task<Void, Never>?
 
         init(state: EditorTabState, editorSettings: EditorSettings) {
             self.state = state
@@ -523,6 +525,7 @@ struct CodeEditorView: NSViewRepresentable {
         }
 
         deinit {
+            previewRefreshTask?.cancel()
             NotificationCenter.default.removeObserver(self)
         }
 
@@ -908,6 +911,7 @@ struct CodeEditorView: NSViewRepresentable {
             state.backingStoreVersion += 1
             state.markModified()
             invalidateRenderedViewportText()
+            scheduleMarkdownPreviewRefresh(immediate: true)
             performSearchViewport(needle, caseSensitive: caseSensitive, useRegex: useRegex)
             refreshViewport(force: true)
         }
@@ -931,6 +935,7 @@ struct CodeEditorView: NSViewRepresentable {
             state.backingStoreVersion += 1
             state.markModified()
             invalidateRenderedViewportText()
+            scheduleMarkdownPreviewRefresh(immediate: true)
             performSearchViewport(needle, caseSensitive: caseSensitive, useRegex: useRegex)
             refreshViewport(force: true)
         }
@@ -1180,6 +1185,21 @@ struct CodeEditorView: NSViewRepresentable {
         func textDidChange(_: Notification) {
             guard let textView, !isUpdating else { return }
             handleTextDidChangeViewport(textView)
+            scheduleMarkdownPreviewRefresh()
+        }
+
+        private func scheduleMarkdownPreviewRefresh(immediate: Bool = false) {
+            guard state.isMarkdownFile else { return }
+            previewRefreshTask?.cancel()
+            if immediate {
+                state.previewRefreshVersion += 1
+                return
+            }
+            previewRefreshTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: Self.previewRefreshDebounceNanos)
+                guard !Task.isCancelled, let self else { return }
+                self.state.previewRefreshVersion += 1
+            }
         }
 
         private func handleTextDidChangeViewport(_ textView: NSTextView) {
@@ -1319,6 +1339,7 @@ struct CodeEditorView: NSViewRepresentable {
             state.backingStoreVersion += 1
             state.markModified()
             invalidateRenderedViewportText()
+            scheduleMarkdownPreviewRefresh(immediate: true)
             appendViewportRedo(group)
             if let selection = group.edits.first?.selectionBefore {
                 applyViewportHistorySelection(selection)
@@ -1346,6 +1367,7 @@ struct CodeEditorView: NSViewRepresentable {
             state.backingStoreVersion += 1
             state.markModified()
             invalidateRenderedViewportText()
+            scheduleMarkdownPreviewRefresh(immediate: true)
             appendViewportUndo(group)
             if let selection = group.edits.last?.selectionAfter {
                 applyViewportHistorySelection(selection)
@@ -1519,6 +1541,9 @@ struct CodeEditorView: NSViewRepresentable {
                 affectedCharRange: affectedCharRange,
                 replacementString: replacementString
             )
+            if replacementString?.contains("\n") == true {
+                scheduleMarkdownPreviewRefresh(immediate: true)
+            }
             return true
         }
 

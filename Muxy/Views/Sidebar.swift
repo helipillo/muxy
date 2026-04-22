@@ -417,32 +417,68 @@ private struct AIUsagePreviewButton: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 4) {
-                if isRefreshing {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(foreground)
-                } else if let display, let percentLabel {
-                    ProviderIconView(iconName: display.iconName, size: 13, style: .monochrome(foreground))
-                    Text(percentLabel)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(foreground)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+            Group {
+                if expanded {
+                    expandedLabel
                 } else {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(foreground)
+                    compactLabel
                 }
             }
-            .frame(height: 24)
-            .padding(.horizontal, expanded ? 6 : 7)
             .background(background, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
         .accessibilityLabel("AI Usage")
+    }
+
+    @ViewBuilder
+    private var expandedLabel: some View {
+        HStack(spacing: 4) {
+            if isRefreshing {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(foreground)
+            } else if let display, let percentLabel {
+                ProviderIconView(iconName: display.iconName, size: 13, style: .monochrome(foreground))
+                Text(percentLabel)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(foreground)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            } else {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(foreground)
+            }
+        }
+        .frame(height: 24)
+        .padding(.horizontal, 6)
+    }
+
+    @ViewBuilder
+    private var compactLabel: some View {
+        if isRefreshing {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(foreground)
+                .frame(width: 24, height: 24)
+        } else if let display, let percentLabel {
+            VStack(spacing: 1) {
+                ProviderIconView(iconName: display.iconName, size: 13, style: .monochrome(foreground))
+                Text(percentLabel)
+                    .font(.system(size: 7.5, weight: .semibold))
+                    .foregroundStyle(foreground)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .frame(width: 24, height: 24)
+        } else {
+            Image(systemName: "sparkles")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(foreground)
+                .frame(width: 24, height: 24)
+        }
     }
 }
 

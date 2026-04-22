@@ -349,9 +349,7 @@ struct CodeEditorView: NSViewRepresentable {
 
         updateSearchViewport(coordinator: coordinator)
         coordinator.syncMarkdownScrollPositionIfNeeded()
-        if state.markdownScrollDriver != .preview {
-            coordinator.updateMarkdownPreviewScrollProgress()
-        }
+        coordinator.updateMarkdownPreviewScrollProgress()
 
         if coordinator.lastEditorFocusVersion != editorFocusVersion {
             coordinator.lastEditorFocusVersion = editorFocusVersion
@@ -1211,6 +1209,7 @@ struct CodeEditorView: NSViewRepresentable {
                 viewport.applyViewport(viewport.viewportStartLine ..< viewport.viewportStartLine + newLocalLines.count)
             }
 
+            state.backingStoreVersion += 1
             state.markModified()
 
             isEditingViewport = true
@@ -1317,6 +1316,7 @@ struct CodeEditorView: NSViewRepresentable {
                     insertedLineCount: edit.oldLines.count
                 )
             }
+            state.backingStoreVersion += 1
             state.markModified()
             invalidateRenderedViewportText()
             appendViewportRedo(group)
@@ -1343,6 +1343,7 @@ struct CodeEditorView: NSViewRepresentable {
                     insertedLineCount: edit.newLines.count
                 )
             }
+            state.backingStoreVersion += 1
             state.markModified()
             invalidateRenderedViewportText()
             appendViewportUndo(group)

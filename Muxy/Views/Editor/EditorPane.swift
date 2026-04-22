@@ -148,9 +148,14 @@ struct EditorPane: View {
         .background(MuxyTheme.bg)
     }
 
+    private var renderedMarkdownContent: String {
+        _ = state.backingStoreVersion
+        return state.backingStore?.fullText() ?? ""
+    }
+
     private var renderedMarkdownHTML: String {
         MarkdownRenderer.html(
-            content: state.backingStore?.fullText() ?? "",
+            content: renderedMarkdownContent,
             filePath: state.filePath,
             bgColor: ghostty.backgroundColor,
             fgColor: ghostty.foregroundColor,

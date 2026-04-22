@@ -392,6 +392,7 @@ struct MarkdownWebView: NSViewRepresentable {
         func loadHTML(_ html: String, filePath: String?, into webView: WKWebView) {
             lastHTML = html
             currentFilePath = filePath
+            lastScrollProgress = -1
             loadCount += 1
             isNavigationInFlight = true
             markdownWebLogger.debug(
@@ -413,6 +414,7 @@ struct MarkdownWebView: NSViewRepresentable {
             if html != lastHTML {
                 lastHTML = html
                 pendingScrollProgress = scrollSyncEnabled ? scrollPosition : nil
+                lastScrollProgress = -1
                 loadCount += 1
                 isNavigationInFlight = true
                 markdownWebLogger.debug(

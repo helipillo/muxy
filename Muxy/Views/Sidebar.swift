@@ -455,8 +455,6 @@ private struct AIUsageMetricRowView: View {
     let row: AIUsageMetricRow
     let fetchedAt: Date
 
-    @State private var isPaceHovered = false
-
     @AppStorage(AIUsageSettingsStore.usageDisplayModeKey) private var usageDisplayModeRaw = AIUsageSettingsStore.defaultUsageDisplayMode.rawValue
 
     private var usageDisplayMode: AIUsageDisplayMode {
@@ -616,17 +614,9 @@ private struct AIUsageMetricRowView: View {
                     .foregroundStyle(MuxyTheme.fgMuted)
 
                 if paceDetailText != nil {
-                    ZStack {
-                        Circle()
-                            .fill(paceIndicatorColor)
-                            .frame(width: 5, height: 5)
-
-                        Rectangle()
-                            .fill(Color.clear)
-                            .frame(width: 14, height: 14)
-                            .contentShape(Rectangle())
-                    }
-                    .onHover { isPaceHovered = $0 }
+                    Circle()
+                        .fill(paceIndicatorColor)
+                        .frame(width: 5, height: 5)
                 }
                 Spacer()
                 if let percent = displayPercent {
@@ -647,16 +637,21 @@ private struct AIUsageMetricRowView: View {
                     .controlSize(.mini)
             }
 
-            if isPaceHovered, let paceDetailText {
-                Text(paceDetailText)
-                    .font(.system(size: 9))
-                    .foregroundStyle(MuxyTheme.fgDim)
-            }
-
             if let resetDate = row.resetDate {
-                Text("Resets \(Self.resetFormatter.string(from: resetDate))")
-                    .font(.system(size: 9))
-                    .foregroundStyle(MuxyTheme.fgDim)
+                HStack(spacing: 6) {
+                    Text("Resets \(Self.resetFormatter.string(from: resetDate))")
+                        .font(.system(size: 9))
+                        .foregroundStyle(MuxyTheme.fgDim)
+
+                    Spacer(minLength: 0)
+
+                    if let paceDetailText {
+                        Text(paceDetailText)
+                            .font(.system(size: 9))
+                            .foregroundStyle(MuxyTheme.fgDim)
+                            .lineLimit(1)
+                    }
+                }
             }
         }
     }

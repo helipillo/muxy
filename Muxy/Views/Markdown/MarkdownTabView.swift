@@ -309,13 +309,10 @@ struct MarkdownWebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         private static let programmaticScrollSuppressionWindow: TimeInterval = 0.2
 
-        private static let snapshotFadeDuration: TimeInterval = 0.12
-
         private var lastHTML: String = ""
         private var lastScrollProgress: CGFloat = -1
         private var lastReportedScrollProgress: CGFloat = -1
         private var pendingScrollProgress: CGFloat?
-        private var snapshotOverlayView: NSImageView?
         private var activeNavigation: WKNavigation?
         private var loadCount: Int = 0
         private var currentFilePath: String?
@@ -390,7 +387,6 @@ struct MarkdownWebView: NSViewRepresentable {
         func removeScrollObserver() {
             isApplyingProgrammaticScroll = false
             programmaticScrollSuppressionUntil = nil
-            removeSnapshotOverlay()
         }
 
         func loadHTML(_ html: String, filePath: String?, into webView: WKWebView) {
@@ -418,7 +414,6 @@ struct MarkdownWebView: NSViewRepresentable {
             if html != lastHTML {
                 lastHTML = html
                 pendingScrollProgress = scrollSyncEnabled ? scrollPosition : nil
-                installSnapshotOverlay(from: webView)
                 lastScrollProgress = -1
                 loadCount += 1
                 isNavigationInFlight = true
@@ -460,11 +455,7 @@ struct MarkdownWebView: NSViewRepresentable {
             isNavigationInFlight = false
             if let pending = pendingScrollProgress {
                 pendingScrollProgress = nil
-                applyScrollProgress(pending, to: webView) { [weak self] in
-                    self?.fadeOutSnapshotOverlay()
-                }
-            } else {
-                fadeOutSnapshotOverlay()
+                applyScrollProgress(pending, to: webView)
             }
             updateContentScrollbarVisibility(in: webView)
             collectJavaScriptErrors(from: webView)
@@ -476,14 +467,12 @@ struct MarkdownWebView: NSViewRepresentable {
             withError error: Error
         ) {
             isNavigationInFlight = false
-            fadeOutSnapshotOverlay()
             logNavigationFailure(kind: "provisional", navigation: navigation, error: error)
             collectJavaScriptErrors(from: webView)
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             isNavigationInFlight = false
-            fadeOutSnapshotOverlay()
             logNavigationFailure(kind: "navigation", navigation: navigation, error: error)
             collectJavaScriptErrors(from: webView)
         }
@@ -542,17 +531,11 @@ struct MarkdownWebView: NSViewRepresentable {
             onScrollProgressChanged?(clampedProgress)
         }
 
-        func applyScrollProgress(_ progress: CGFloat, to webView: WKWebView, completion: (() -> Void)? = nil) {
-            guard progress >= 0 else {
-                completion?()
-                return
-            }
+        func applyScrollProgress(_ progress: CGFloat, to webView: WKWebView) {
+            guard progress >= 0 else { return }
 
             let clampedProgress = min(max(progress, 0), 1)
-            guard abs(lastScrollProgress - clampedProgress) > 0.0005 else {
-                completion?()
-                return
-            }
+            guard abs(lastScrollProgress - clampedProgress) > 0.0005 else { return }
 
             isApplyingProgrammaticScroll = true
             programmaticScrollSuppressionUntil = Date().addingTimeInterval(Self.programmaticScrollSuppressionWindow)
@@ -567,47 +550,11 @@ struct MarkdownWebView: NSViewRepresentable {
                         reason=\(error.localizedDescription, privacy: .public)
                         """
                     )
-                    completion?()
                     return
                 }
 
                 self.lastScrollProgress = clampedProgress
-                completion?()
             }
-        }
-
-        private func installSnapshotOverlay(from webView: WKWebView) {
-            removeSnapshotOverlay()
-            guard let bitmap = webView.bitmapImageRepForCachingDisplay(in: webView.bounds) else { return }
-            webView.cacheDisplay(in: webView.bounds, to: bitmap)
-            let image = NSImage(size: webView.bounds.size)
-            image.addRepresentation(bitmap)
-            let overlay = NSImageView(frame: webView.bounds)
-            overlay.image = image
-            overlay.imageScaling = .scaleAxesIndependently
-            overlay.autoresizingMask = [.width, .height]
-            overlay.alphaValue = 1
-            overlay.wantsLayer = true
-            webView.addSubview(overlay)
-            snapshotOverlayView = overlay
-        }
-
-        private func fadeOutSnapshotOverlay() {
-            guard let overlay = snapshotOverlayView else { return }
-            snapshotOverlayView = nil
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = Self.snapshotFadeDuration
-                overlay.animator().alphaValue = 0
-            } completionHandler: {
-                Task { @MainActor in
-                    overlay.removeFromSuperview()
-                }
-            }
-        }
-
-        private func removeSnapshotOverlay() {
-            snapshotOverlayView?.removeFromSuperview()
-            snapshotOverlayView = nil
         }
 
         private func logNavigationFailure(kind: String, navigation: WKNavigation!, error: Error) {

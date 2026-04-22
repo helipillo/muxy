@@ -305,10 +305,10 @@ struct SidebarFooter: View {
 
     private var mostActiveProviderDisplay: (percent: Int, iconName: String)? {
         guard let snapshot = usageService.mostActiveProviderSnapshot,
-              case .available = snapshot.state,
-              let percent = snapshot.rows.first?.percent
+              case .available = snapshot.state
         else { return nil }
-        return (Int(percent.rounded()), snapshot.providerIconName)
+        let percent = Int((snapshot.rows.first?.percent ?? 0).rounded())
+        return (percent, snapshot.providerIconName)
     }
 
     private var aiUsageButton: some View {

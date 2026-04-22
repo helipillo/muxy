@@ -492,7 +492,7 @@ struct CodeEditorView: NSViewRepresentable {
         private static let viewportUndoCoalesceInterval: CFTimeInterval = 1.0
         private static let undoCommandSelector = #selector(CodeEditorTextView.undo(_:))
         private static let redoCommandSelector = #selector(CodeEditorTextView.redo(_:))
-        private static let previewRefreshDebounceNanos: UInt64 = 250_000_000
+        private static let previewRefreshDebounceNanos: UInt64 = 500_000_000
         private static let perfLogger = Logger(subsystem: "app.muxy", category: "EditorPerf")
         private static let perfEnabled: Bool = {
             if let env = ProcessInfo.processInfo.environment["MUXY_EDITOR_PERF"] {
@@ -1195,11 +1195,13 @@ struct CodeEditorView: NSViewRepresentable {
                 state.previewRefreshVersion += 1
                 return
             }
-            previewRefreshTask = Task { @MainActor [weak self] in
+            let task = Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: Self.previewRefreshDebounceNanos)
                 guard !Task.isCancelled, let self else { return }
+                guard self.previewRefreshTask?.isCancelled == false else { return }
                 self.state.previewRefreshVersion += 1
             }
+            previewRefreshTask = task
         }
 
         private func handleTextDidChangeViewport(_ textView: NSTextView) {

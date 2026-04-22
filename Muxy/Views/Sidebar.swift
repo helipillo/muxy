@@ -455,6 +455,8 @@ private struct AIUsageMetricRowView: View {
     let row: AIUsageMetricRow
     let fetchedAt: Date
 
+    @State private var isPaceHovered = false
+
     @AppStorage(AIUsageSettingsStore.usageDisplayModeKey) private var usageDisplayModeRaw = AIUsageSettingsStore.defaultUsageDisplayMode.rawValue
 
     private var usageDisplayMode: AIUsageDisplayMode {
@@ -487,26 +489,23 @@ private struct AIUsageMetricRowView: View {
         }
     }
 
-    private var paceTooltip: String? {
+    private var paceDetailText: String? {
         guard let paceResult else { return nil }
 
-        let secondLine: String
-        switch usageDisplayMode {
-        case .used:
-            secondLine = "\(Int(paceResult.projectedUsedPercentAtReset))% used at reset"
-        case .remaining:
-            secondLine = "\(Int(paceResult.projectedLeftPercentAtReset))% left at reset"
-        }
-
         if let eta = paceResult.runsOutIn {
-            return "\(paceResult.status.headline)\nRuns out in \(AIUsagePaceCalculator.formatDuration(eta))"
+            return "Runs out in \(AIUsagePaceCalculator.formatDuration(eta))"
         }
 
         if let deficit = paceResult.deficitPercent, deficit > 0 {
-            return "\(paceResult.status.headline)\n\(Int(deficit))% in deficit"
+            return "\(Int(deficit))% in deficit"
         }
 
-        return "\(paceResult.status.headline)\n\(secondLine)"
+        switch usageDisplayMode {
+        case .used:
+            return "\(Int(paceResult.projectedUsedPercentAtReset))% used at reset"
+        case .remaining:
+            return "\(Int(paceResult.projectedLeftPercentAtReset))% left at reset"
+        }
     }
 
     private var displayDetail: String? {
@@ -616,7 +615,7 @@ private struct AIUsageMetricRowView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(MuxyTheme.fgMuted)
 
-                if let tooltip = paceTooltip {
+                if paceDetailText != nil {
                     ZStack {
                         Circle()
                             .fill(paceIndicatorColor)
@@ -627,7 +626,7 @@ private struct AIUsageMetricRowView: View {
                             .frame(width: 14, height: 14)
                             .contentShape(Rectangle())
                     }
-                    .help(tooltip)
+                    .onHover { isPaceHovered = $0 }
                 }
                 Spacer()
                 if let percent = displayPercent {
@@ -646,6 +645,12 @@ private struct AIUsageMetricRowView: View {
                 ProgressView(value: percent, total: 100)
                     .tint(MuxyTheme.accent)
                     .controlSize(.mini)
+            }
+
+            if isPaceHovered, let paceDetailText {
+                Text(paceDetailText)
+                    .font(.system(size: 9))
+                    .foregroundStyle(MuxyTheme.fgDim)
             }
 
             if let resetDate = row.resetDate {

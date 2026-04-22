@@ -313,7 +313,6 @@ struct MarkdownWebView: NSViewRepresentable {
         private var lastScrollProgress: CGFloat = -1
         private var lastReportedScrollProgress: CGFloat = -1
         private var pendingScrollProgress: CGFloat?
-        private var revealAfterLoad = false
         private var activeNavigation: WKNavigation?
         private var loadCount: Int = 0
         private var currentFilePath: String?
@@ -415,8 +414,6 @@ struct MarkdownWebView: NSViewRepresentable {
             if html != lastHTML {
                 lastHTML = html
                 pendingScrollProgress = scrollSyncEnabled ? scrollPosition : nil
-                revealAfterLoad = true
-                webView.alphaValue = 0
                 lastScrollProgress = -1
                 loadCount += 1
                 isNavigationInFlight = true
@@ -458,15 +455,7 @@ struct MarkdownWebView: NSViewRepresentable {
             isNavigationInFlight = false
             if let pending = pendingScrollProgress {
                 pendingScrollProgress = nil
-                applyScrollProgress(pending, to: webView) {
-                    if self.revealAfterLoad {
-                        webView.alphaValue = 1
-                        self.revealAfterLoad = false
-                    }
-                }
-            } else if revealAfterLoad {
-                webView.alphaValue = 1
-                revealAfterLoad = false
+                applyScrollProgress(pending, to: webView)
             }
             updateContentScrollbarVisibility(in: webView)
             collectJavaScriptErrors(from: webView)
@@ -542,17 +531,11 @@ struct MarkdownWebView: NSViewRepresentable {
             onScrollProgressChanged?(clampedProgress)
         }
 
-        func applyScrollProgress(_ progress: CGFloat, to webView: WKWebView, completion: (() -> Void)? = nil) {
-            guard progress >= 0 else {
-                completion?()
-                return
-            }
+        func applyScrollProgress(_ progress: CGFloat, to webView: WKWebView) {
+            guard progress >= 0 else { return }
 
             let clampedProgress = min(max(progress, 0), 1)
-            guard abs(lastScrollProgress - clampedProgress) > 0.0005 else {
-                completion?()
-                return
-            }
+            guard abs(lastScrollProgress - clampedProgress) > 0.0005 else { return }
 
             isApplyingProgrammaticScroll = true
             programmaticScrollSuppressionUntil = Date().addingTimeInterval(Self.programmaticScrollSuppressionWindow)
@@ -567,12 +550,10 @@ struct MarkdownWebView: NSViewRepresentable {
                         reason=\(error.localizedDescription, privacy: .public)
                         """
                     )
-                    completion?()
                     return
                 }
 
                 self.lastScrollProgress = clampedProgress
-                completion?()
             }
         }
 

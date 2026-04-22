@@ -349,15 +349,14 @@ final class AIUsageService {
         for current in snapshots {
             guard case .available = current.state else { continue }
 
-            let currentPercent = current.rows.first?.percent ?? 0
-            let score: Double
-            if let previous = previousSnapshotsCache.first(where: { $0.providerID == current.providerID }),
-               case .available = previous.state,
-               let previousPercent = previous.rows.first?.percent
+            let currentPercent = current.rows.compactMap(\.percent).max() ?? 0
+            let score: Double = if let previous = previousSnapshotsCache.first(where: { $0.providerID == current.providerID }),
+                                   case .available = previous.state,
+                                   let previousPercent = previous.rows.compactMap(\.percent).max()
             {
-                score = abs(currentPercent - previousPercent)
+                abs(currentPercent - previousPercent)
             } else {
-                score = currentPercent
+                currentPercent
             }
 
             if score > maxScore {

@@ -307,23 +307,36 @@ struct SidebarFooter: View {
         guard let snapshot = usageService.mostActiveProviderSnapshot,
               case .available = snapshot.state
         else { return nil }
-        let percent = Int((snapshot.rows.first?.percent ?? 0).rounded())
+        let percent = Int((snapshot.rows.compactMap(\.percent).max() ?? 0).rounded())
         return (percent, snapshot.providerIconName)
+    }
+
+    private var mostActiveProviderPercentLabel: String? {
+        guard let display = mostActiveProviderDisplay else { return nil }
+        if display.percent >= 100 { return "100" }
+        if display.percent <= 0 { return "0%" }
+        return "\(display.percent)%"
     }
 
     private var aiUsageButton: some View {
         Button { showAIUsagePopover.toggle() } label: {
-            HStack(spacing: 3) {
+            Group {
                 if usageService.isRefreshing {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(MuxyTheme.fgMuted)
-                } else if let display = mostActiveProviderDisplay {
-                    ProviderIconView(iconName: display.iconName, size: 12)
-                        .opacity(0.7)
-                    Text("\(display.percent)%")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(MuxyTheme.fgMuted)
+                } else if let display = mostActiveProviderDisplay, let label = mostActiveProviderPercentLabel {
+                    ZStack(alignment: .bottomTrailing) {
+                        ProviderIconView(iconName: display.iconName, size: 14, style: .monochrome(MuxyTheme.fgMuted))
+                            .opacity(0.75)
+                        Text(label)
+                            .font(.system(size: 7, weight: .semibold))
+                            .foregroundStyle(MuxyTheme.fgMuted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .padding(.trailing, 1)
+                            .padding(.bottom, 1)
+                    }
                 } else {
                     Image(systemName: "sparkles")
                         .font(.system(size: 11, weight: .semibold))
@@ -406,26 +419,12 @@ private struct AIUsagePanel: View {
         return formatter
     }()
 
-    private var mostActiveSnapshotForPanel: AIProviderUsageSnapshot? {
-        snapshots
-            .filter { snapshot in
-                guard case .available = snapshot.state else { return false }
-                return snapshot.rows.contains { $0.percent != nil }
-            }
-            .max { $0.rows.first?.percent ?? 0 < $1.rows.first?.percent ?? 0 }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                if let mostActive = mostActiveSnapshotForPanel {
-                    ProviderIconView(iconName: mostActive.providerIconName, size: 12)
-                        .opacity(0.7)
-                } else {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(MuxyTheme.fgMuted)
-                }
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(MuxyTheme.fgMuted)
                 Text("AI Usage")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(MuxyTheme.fgMuted)

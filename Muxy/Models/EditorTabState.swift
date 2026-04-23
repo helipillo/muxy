@@ -77,6 +77,8 @@ final class EditorTabState: Identifiable {
     var markdownEditorMaxScrollY: CGFloat = 0
     var markdownScrollSyncEnabled = true
     var markdownScrollDriver: EditorMarkdownScrollDriver = .editor
+    var markdownActiveAnchorID: String?
+    var markdownActiveAnchorLocalProgress: Double = 0
 
     @ObservationIgnored private weak var linkedMarkdownEditorScrollView: NSScrollView?
 

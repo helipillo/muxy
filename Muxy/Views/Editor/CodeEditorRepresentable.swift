@@ -352,6 +352,7 @@ struct CodeEditorView: NSViewRepresentable {
         updateSearchViewport(coordinator: coordinator)
         coordinator.syncMarkdownScrollPositionIfNeeded()
         coordinator.updateMarkdownEditorScrollMetrics()
+        coordinator.updateMarkdownEditorAnchorSnapshot()
         coordinator.updateMarkdownPreviewScrollProgress()
 
         if coordinator.lastEditorFocusVersion != editorFocusVersion {
@@ -515,6 +516,8 @@ struct CodeEditorView: NSViewRepresentable {
         private var lastRenderedBackingStoreVersion = -1
         private var lastObservedClipSize: CGSize = .zero
         private var isApplyingMarkdownScroll = false
+        private var cachedMarkdownAnchorsBackingStoreVersion = -1
+        private var cachedMarkdownAnchors: [MarkdownSyncAnchor] = []
         private var refreshTimingCount = 0
         private var highlightTimingCount = 0
         private var lastRefreshDurationMs: Double = 0
@@ -1100,6 +1103,7 @@ struct CodeEditorView: NSViewRepresentable {
                 lastObservedClipSize = size
             }
             updateMarkdownEditorScrollMetrics()
+            updateMarkdownEditorAnchorSnapshot()
             if isApplyingMarkdownScroll {
                 isApplyingMarkdownScroll = false
             } else {
@@ -1121,8 +1125,43 @@ struct CodeEditorView: NSViewRepresentable {
                 lastObservedClipSize = size
             }
             updateMarkdownEditorScrollMetrics()
+            updateMarkdownEditorAnchorSnapshot()
             if !isEditingViewport {
                 refreshViewport(force: false)
+            }
+        }
+
+        func updateMarkdownEditorAnchorSnapshot() {
+            guard state.isMarkdownFile,
+                  state.markdownViewMode == .split,
+                  state.markdownScrollSyncEnabled,
+                  let viewport = viewportState,
+                  let scrollView,
+                  let store = state.backingStore
+            else {
+                state.markdownActiveAnchorID = nil
+                state.markdownActiveAnchorLocalProgress = 0
+                return
+            }
+
+            if cachedMarkdownAnchorsBackingStoreVersion != state.backingStoreVersion {
+                cachedMarkdownAnchorsBackingStoreVersion = state.backingStoreVersion
+                cachedMarkdownAnchors = MarkdownAnchorParser.parseAnchors(in: store.fullText())
+            }
+
+            let focusLine = MarkdownEditorAnchorMapper.focusLine(
+                scrollY: scrollView.contentView.bounds.origin.y,
+                visibleHeight: scrollView.contentView.bounds.height,
+                estimatedLineHeight: viewport.estimatedLineHeight,
+                lineCount: store.lineCount
+            )
+
+            let snapshot = MarkdownEditorAnchorMapper.snapshot(focusLine: focusLine, anchors: cachedMarkdownAnchors)
+            if state.markdownActiveAnchorID != snapshot.activeAnchorID {
+                state.markdownActiveAnchorID = snapshot.activeAnchorID
+            }
+            if abs(state.markdownActiveAnchorLocalProgress - snapshot.localProgress) > 0.0005 {
+                state.markdownActiveAnchorLocalProgress = snapshot.localProgress
             }
         }
 

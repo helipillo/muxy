@@ -177,6 +177,10 @@ enum MarkdownRenderer {
         let encodedPayload = Data(preparedMermaidContent.utf8).base64EncodedString()
 
         let title = escapeForHTML(filePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Markdown")
+        let baseHref = filePath.map {
+            URL(fileURLWithPath: $0).deletingLastPathComponent().absoluteString
+        }.map(escapeForHTML)
+        let baseTag = baseHref.map { "<base href=\"\($0)\">" } ?? ""
         return """
         <!DOCTYPE html>
         <html>
@@ -184,6 +188,7 @@ enum MarkdownRenderer {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>\(title)</title>
+            \(baseTag)
             <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha512-..." crossorigin="anonymous"></script>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js" crossorigin="anonymous"></script>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/swift.min.js" crossorigin="anonymous"></script>

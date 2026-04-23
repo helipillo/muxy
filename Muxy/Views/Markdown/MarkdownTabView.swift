@@ -628,6 +628,8 @@ struct MarkdownWebView: NSViewRepresentable {
                 return
             }
 
+            let reason = (payload["reason"] as? String) ?? ""
+
             let geometries = entries.compactMap { entry -> MarkdownPreviewAnchorGeometry? in
                 guard let anchorID = entry["anchorID"] as? String,
                       let topNumber = entry["top"] as? NSNumber,
@@ -658,10 +660,28 @@ struct MarkdownWebView: NSViewRepresentable {
 
             lastAnchorGeometrySnapshot = geometries
             logAnchorGeometryIssuesIfNeeded(geometries)
+            let shouldNotifyLayoutChange = shouldTriggerLayoutChange(forGeometryReason: reason)
             DispatchQueue.main.async {
                 self.onAnchorGeometryChanged?(geometries)
-                self.onLayoutChanged?()
+                if shouldNotifyLayoutChange {
+                    self.onLayoutChanged?()
+                }
             }
+        }
+
+        private func shouldTriggerLayoutChange(forGeometryReason reason: String) -> Bool {
+            let normalized = reason.lowercased()
+            if normalized.isEmpty {
+                return false
+            }
+
+            let noisyMarkers = ["img-load", "img-error", "resize-observer", "mutation", "connect"]
+            if noisyMarkers.contains(where: { normalized.contains($0) }) {
+                return false
+            }
+
+            let stableMarkers = ["swift-didfinish", "window-resize", "fonts-ready", "window-load", "dom-content-loaded", "manual"]
+            return stableMarkers.contains(where: { normalized.contains($0) })
         }
 
         private func geometrySnapshotIsMeaningfullyDifferent(

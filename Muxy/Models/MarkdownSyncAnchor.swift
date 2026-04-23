@@ -14,7 +14,7 @@ enum MarkdownSyncAnchorKind: String, Codable {
     case other
 }
 
-struct MarkdownSyncAnchor: Equatable, Identifiable {
+struct MarkdownSyncAnchor: Equatable, Identifiable, Codable {
     let id: String
     let kind: MarkdownSyncAnchorKind
     let startLine: Int

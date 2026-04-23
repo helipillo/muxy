@@ -83,27 +83,32 @@ private struct MermaidThemeVariables: Codable {
 }
 
 enum MarkdownRenderer {
+    struct Palette {
+        let background: NSColor
+        let foreground: NSColor
+        let accent: NSColor
+    }
+
     @MainActor
     static func html(
         content: String,
+        anchors: [MarkdownSyncAnchor],
         filePath: String?,
-        bgColor: NSColor,
-        fgColor: NSColor,
-        accentColor: NSColor
+        palette: Palette
     ) -> String {
-        let bgHex = colorToHex(bgColor)
-        let fgHex = colorToHex(fgColor)
-        let accentHex = colorToHex(accentColor)
-        let borderHex = colorToHex(blend(foreground: fgColor, background: bgColor, amount: 0.2))
-        let mutedHex = colorToHex(blend(foreground: fgColor, background: bgColor, amount: 0.65))
-        let codeBgHex = colorToHex(blend(foreground: fgColor, background: bgColor, amount: 0.08))
-        let rowAltHex = colorToHex(blend(foreground: fgColor, background: bgColor, amount: 0.04))
-        let mermaidSecondaryHex = colorToHex(blend(foreground: fgColor, background: bgColor, amount: 0.12))
-        let mermaidTertiaryHex = colorToHex(blend(foreground: fgColor, background: bgColor, amount: 0.18))
-        let accentSoftHex = colorToHex(blend(foreground: accentColor, background: bgColor, amount: 0.22))
-        let accentSubtleHex = colorToHex(blend(foreground: accentColor, background: bgColor, amount: 0.12))
-        let accentMutedHex = colorToHex(blend(foreground: accentColor, background: bgColor, amount: 0.35))
-        let accentStrongHex = colorToHex(blend(foreground: accentColor, background: bgColor, amount: 0.5))
+        let bgHex = colorToHex(palette.background)
+        let fgHex = colorToHex(palette.foreground)
+        let accentHex = colorToHex(palette.accent)
+        let borderHex = colorToHex(blend(foreground: palette.foreground, background: palette.background, amount: 0.2))
+        let mutedHex = colorToHex(blend(foreground: palette.foreground, background: palette.background, amount: 0.65))
+        let codeBgHex = colorToHex(blend(foreground: palette.foreground, background: palette.background, amount: 0.08))
+        let rowAltHex = colorToHex(blend(foreground: palette.foreground, background: palette.background, amount: 0.04))
+        let mermaidSecondaryHex = colorToHex(blend(foreground: palette.foreground, background: palette.background, amount: 0.12))
+        let mermaidTertiaryHex = colorToHex(blend(foreground: palette.foreground, background: palette.background, amount: 0.18))
+        let accentSoftHex = colorToHex(blend(foreground: palette.accent, background: palette.background, amount: 0.22))
+        let accentSubtleHex = colorToHex(blend(foreground: palette.accent, background: palette.background, amount: 0.12))
+        let accentMutedHex = colorToHex(blend(foreground: palette.accent, background: palette.background, amount: 0.35))
+        let accentStrongHex = colorToHex(blend(foreground: palette.accent, background: palette.background, amount: 0.5))
         let mermaidThemeVariables = MermaidThemeVariables(
             primaryColor: "#\(accentHex)",
             primaryTextColor: "#\(fgHex)",
@@ -175,6 +180,13 @@ enum MarkdownRenderer {
         let mermaidThemeVariablesJSON = mermaidThemeVariables.jsObjectLiteral
         let preparedMermaidContent = MermaidCodeBlockNormalizer.normalizeMermaidCodeBlocks(in: content)
         let encodedPayload = Data(preparedMermaidContent.utf8).base64EncodedString()
+        let anchorsJSON = if let data = try? JSONEncoder().encode(anchors),
+                             let json = String(data: data, encoding: .utf8)
+        {
+            json
+        } else {
+            "[]"
+        }
 
         let title = escapeForHTML(filePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Markdown")
         return """
@@ -417,7 +429,6 @@ enum MarkdownRenderer {
                 });
 
                 var _mermaidInitialized = false;
-                var _markedConfigured = false;
                 function decodeBase64UTF8(base64) {
                     try {
                         var binary = atob(base64);
@@ -715,143 +726,6 @@ enum MarkdownRenderer {
                     }
                 }
 
-                function detectAnchorKind(lines, index) {
-                    var line = lines[index] || '';
-                    var trimmed = line.trim();
-                    if (!trimmed) {
-                        return null;
-                    }
-                    if (/^ {0,3}(?:```+|~~~+)/.test(line)) {
-                        var info = line.replace(/^ {0,3}(?:```+|~~~+)\\s*/, '').trim().toLowerCase();
-                        return info === 'mermaid' ? 'mermaid' : 'fencedCode';
-                    }
-                    if (/^ {0,3}#{1,6}(?:\\s+|$)/.test(line)) {
-                        return 'heading';
-                    }
-                    if (/^ {0,3}(?:[-*_])(?:\\s*[-*_]){2,}\\s*$/.test(line)) {
-                        return 'thematicBreak';
-                    }
-                    if (/^ {0,3}>\\s?/.test(line)) {
-                        return 'blockquote';
-                    }
-                    if (/^ {0,3}(?:[*+-]|\\d+[.)])\\s+/.test(line)) {
-                        return 'list';
-                    }
-                    if (/^\\s*!\\[[^\\]]*\\]\\([^\\)]+\\)\\s*$/.test(line)) {
-                        return 'image';
-                    }
-                    if (/\\|/.test(line)) {
-                        var next = lines[index + 1] || '';
-                        if (/^\\s*\\|?(?:\\s*:?-{3,}:?\\s*\\|)+\\s*:?-{3,}:?\\s*\\|?\\s*$/.test(next)) {
-                            return 'table';
-                        }
-                    }
-                    if (/^ {0,3}<(?!!--)([A-Za-z][\\w-]*)(\\s|>|$)/.test(line)) {
-                        return 'htmlBlock';
-                    }
-                    return 'paragraph';
-                }
-
-                function consumeAnchor(lines, index, kind) {
-                    var i = index;
-                    if (kind === 'heading' || kind === 'thematicBreak' || kind === 'image' || kind === 'htmlBlock') {
-                        return index;
-                    }
-                    if (kind === 'fencedCode' || kind === 'mermaid') {
-                        var opener = lines[index] || '';
-                        var openerMatch = opener.match(/^ {0,3}(```+|~~~+)/);
-                        var fence = openerMatch ? openerMatch[1][0] : '`';
-                        var minCount = openerMatch ? openerMatch[1].length : 3;
-                        i = index + 1;
-                        while (i < lines.length) {
-                            var candidate = lines[i] || '';
-                            var closeMatch = candidate.match(/^ {0,3}(```+|~~~+)\\s*$/);
-                            if (closeMatch && closeMatch[1][0] === fence && closeMatch[1].length >= minCount) {
-                                return i;
-                            }
-                            i += 1;
-                        }
-                        return lines.length - 1;
-                    }
-                    if (kind === 'blockquote') {
-                        while (i + 1 < lines.length) {
-                            var nextLine = lines[i + 1] || '';
-                            if (!nextLine.trim()) {
-                                i += 1;
-                                continue;
-                            }
-                            if (!/^ {0,3}>\\s?/.test(nextLine)) {
-                                break;
-                            }
-                            i += 1;
-                        }
-                        return i;
-                    }
-                    if (kind === 'list') {
-                        while (i + 1 < lines.length) {
-                            var listNext = lines[i + 1] || '';
-                            if (!listNext.trim()) {
-                                i += 1;
-                                continue;
-                            }
-                            if (/^ {0,3}(?:[*+-]|\\d+[.)])\\s+/.test(listNext) || /^\\s{2,}\\S/.test(listNext)) {
-                                i += 1;
-                                continue;
-                            }
-                            break;
-                        }
-                        return i;
-                    }
-                    if (kind === 'table') {
-                        i = index + 1;
-                        while (i + 1 < lines.length) {
-                            var tableNext = lines[i + 1] || '';
-                            if (!tableNext.trim() || !/\\|/.test(tableNext)) {
-                                break;
-                            }
-                            i += 1;
-                        }
-                        return i;
-                    }
-                    while (i + 1 < lines.length) {
-                        var paragraphNext = lines[i + 1] || '';
-                        if (!paragraphNext.trim()) {
-                            break;
-                        }
-                        if (detectAnchorKind(lines, i + 1) !== 'paragraph') {
-                            break;
-                        }
-                        i += 1;
-                    }
-                    return i;
-                }
-
-                function parseSyncAnchors(content) {
-                    var lines = content.split(/\\r?\\n/);
-                    var anchors = [];
-                    var i = 0;
-                    var sequence = 0;
-                    while (i < lines.length) {
-                        if (!(lines[i] || '').trim()) {
-                            i += 1;
-                            continue;
-                        }
-                        var kind = detectAnchorKind(lines, i) || 'other';
-                        var end = consumeAnchor(lines, i, kind);
-                        var startLine = i + 1;
-                        var endLine = end + 1;
-                        anchors.push({
-                            id: 'muxy-anchor-' + String(sequence),
-                            kind: kind,
-                            startLine: startLine,
-                            endLine: Math.max(startLine, endLine)
-                        });
-                        sequence += 1;
-                        i = end + 1;
-                    }
-                    return anchors;
-                }
-
                 function inferElementKind(element) {
                     if (!element) {
                         return 'other';
@@ -912,31 +786,6 @@ enum MarkdownRenderer {
                     });
                 }
 
-                function normalizeLocalImageSources(markdownRoot) {
-                    if (!markdownRoot) {
-                        return;
-                    }
-                    var images = markdownRoot.querySelectorAll('img[src]');
-                    images.forEach(function(image) {
-                        var rawSrc = image.getAttribute('src');
-                        if (!rawSrc) {
-                            return;
-                        }
-                        var trimmed = rawSrc.trim();
-                        if (!trimmed) {
-                            return;
-                        }
-                        var lower = trimmed.toLowerCase();
-                        var hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed);
-                        if (hasScheme || trimmed.startsWith('//') || lower.startsWith('data:') || lower.startsWith('blob:')) {
-                            return;
-                        }
-                        try {
-                            image.setAttribute('src', new URL(trimmed, document.baseURI).href);
-                        } catch (_) {}
-                    });
-                }
-
                 function assignAnchorMetadata(markdownRoot, anchors) {
                     if (!markdownRoot || !anchors || !anchors.length) {
                         return;
@@ -972,35 +821,13 @@ enum MarkdownRenderer {
                 }
 
                 async function renderMarkdown(content) {
-                    var anchors = parseSyncAnchors(content);
-                    if (!_markedConfigured) {
-                        marked.use({
-                            walkTokens: function(token) {
-                                if (!token || typeof token !== 'object') {
-                                    return;
-                                }
-
-                                if (token.type === 'link') {
-                                    var safeHref = sanitizeURL(token.href, { allowData: false, allowBlob: false });
-                                    if (safeHref) {
-                                        token.href = safeHref;
-                                    } else {
-                                        delete token.href;
-                                    }
-                                }
-
-                                if (token.type === 'image') {
-                                    var safeSrc = sanitizeURL(token.href, { allowData: true, allowBlob: true });
-                                    if (safeSrc) {
-                                        token.href = safeSrc;
-                                    } else {
-                                        delete token.href;
-                                    }
-                                }
-                            }
-                        });
-                        _markedConfigured = true;
-                    }
+                    var anchors = JSON.parse(
+                        JSON.stringify(
+                            Array.isArray(
+                                window.__muxySyncAnchors
+                            ) ? window.__muxySyncAnchors : []
+                        )
+                    );
                     marked.setOptions({
                         highlight: function(code, lang) {
                             if (lang && hljs.getLanguage(lang)) {
@@ -1025,7 +852,6 @@ enum MarkdownRenderer {
                     var html = marked.parse(content);
                     document.getElementById('markdown').innerHTML = html;
                     sanitizeMarkdownDOM(document.getElementById('markdown'));
-                    normalizeLocalImageSources(document.getElementById('markdown'));
                     assignAnchorMetadata(document.getElementById('markdown'), anchors);
                     initializeMermaidControls();
 
@@ -1077,6 +903,7 @@ enum MarkdownRenderer {
                         }
                     }
                 }
+                window.__muxySyncAnchors = \(anchorsJSON);
                 var markdownPayload = decodeBase64UTF8("\(encodedPayload)");
                 renderMarkdown(markdownPayload).catch(function(err) {
                     window.__muxyErrors.push({

@@ -161,10 +161,13 @@ struct EditorPane: View {
     private var renderedMarkdownHTML: String {
         MarkdownRenderer.html(
             content: renderedMarkdownContent,
+            anchors: state.markdownSyncAnchors(),
             filePath: state.filePath,
-            bgColor: ghostty.backgroundColor,
-            fgColor: ghostty.foregroundColor,
-            accentColor: ghostty.accentColor
+            palette: MarkdownRenderer.Palette(
+                background: ghostty.backgroundColor,
+                foreground: ghostty.foregroundColor,
+                accent: ghostty.accentColor
+            )
         )
     }
 

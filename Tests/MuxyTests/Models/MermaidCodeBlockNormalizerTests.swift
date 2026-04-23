@@ -77,10 +77,13 @@ struct MermaidCodeBlockNormalizerTests {
 
         let html = MarkdownRenderer.html(
             content: markdown,
+            anchors: [],
             filePath: nil,
-            bgColor: NSColor.black,
-            fgColor: NSColor.white,
-            accentColor: NSColor.systemBlue
+            palette: MarkdownRenderer.Palette(
+                background: NSColor.black,
+                foreground: NSColor.white,
+                accent: NSColor.systemBlue
+            )
         )
 
         #expect(html.contains(".mermaid"))
@@ -111,16 +114,19 @@ struct MermaidCodeBlockNormalizerTests {
 
         let html = MarkdownRenderer.html(
             content: markdown,
+            anchors: [],
             filePath: nil,
-            bgColor: NSColor.black,
-            fgColor: NSColor.white,
-            accentColor: NSColor.systemBlue
+            palette: MarkdownRenderer.Palette(
+                background: NSColor.black,
+                foreground: NSColor.white,
+                accent: NSColor.systemBlue
+            )
         )
 
         #expect(html.contains("data-muxy-anchor-id"))
         #expect(html.contains("data-muxy-line-start"))
         #expect(html.contains("data-muxy-line-end"))
-        #expect(html.contains("parseSyncAnchors(content)"))
+        #expect(html.contains("window.__muxySyncAnchors = []"))
         #expect(html.contains("muxy-anchor-block muxy-anchor-kind-"))
         #expect(html.contains("data-muxy-mermaid=\"true\""))
     }
@@ -136,10 +142,13 @@ struct MermaidCodeBlockNormalizerTests {
 
         let html = MarkdownRenderer.html(
             content: markdown,
+            anchors: [],
             filePath: "/tmp/readme.md",
-            bgColor: NSColor.black,
-            fgColor: NSColor.white,
-            accentColor: NSColor.systemBlue
+            palette: MarkdownRenderer.Palette(
+                background: NSColor.black,
+                foreground: NSColor.white,
+                accent: NSColor.systemBlue
+            )
         )
 
         #expect(html.contains("sanitizeMarkdownDOM"))

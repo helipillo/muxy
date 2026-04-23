@@ -5,8 +5,8 @@ enum MarkdownEditorAnchorMapper {
     static func focusLine(scrollY: CGFloat, visibleHeight: CGFloat, estimatedLineHeight: CGFloat, lineCount: Int) -> Int {
         guard lineCount > 0 else { return 1 }
         let lineHeight = max(1, estimatedLineHeight)
-        let midY = scrollY + max(0, visibleHeight) / 2
-        let zeroBased = Int(floor(midY / lineHeight))
+        let topY = max(0, scrollY)
+        let zeroBased = Int(floor(topY / lineHeight))
         return min(max(zeroBased + 1, 1), lineCount)
     }
 

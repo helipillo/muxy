@@ -30,10 +30,13 @@ struct MarkdownEditorAnchorMapperTests {
         #expect(MarkdownEditorAnchorMapper.snapshot(focusLine: 7, anchors: anchors) == MarkdownEditorAnchorSyncSnapshot(activeAnchorID: "b", localProgress: 1))
     }
 
-    @Test("computes focus line from viewport")
+    @Test("computes focus line from top of viewport")
     func viewportFocusLine() {
         let focus = MarkdownEditorAnchorMapper.focusLine(scrollY: 0, visibleHeight: 100, estimatedLineHeight: 10, lineCount: 100)
-        #expect(focus == 6)
+        #expect(focus == 1)
+
+        let nextVisibleLine = MarkdownEditorAnchorMapper.focusLine(scrollY: 25, visibleHeight: 100, estimatedLineHeight: 10, lineCount: 100)
+        #expect(nextVisibleLine == 3)
 
         let clampedTop = MarkdownEditorAnchorMapper.focusLine(scrollY: -50, visibleHeight: 100, estimatedLineHeight: 10, lineCount: 10)
         #expect(clampedTop == 1)

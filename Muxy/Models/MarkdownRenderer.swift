@@ -87,7 +87,6 @@ enum MarkdownRenderer {
     static func html(
         content: String,
         filePath: String?,
-        projectPath: String? = nil,
         bgColor: NSColor,
         fgColor: NSColor,
         accentColor: NSColor
@@ -182,9 +181,6 @@ enum MarkdownRenderer {
             URL(fileURLWithPath: $0).deletingLastPathComponent().absoluteString
         }.map(escapeForHTML)
         let baseTag = baseHref.map { "<base href=\"\($0)\">" } ?? ""
-        let projectRootHref = projectPath.map {
-            URL(fileURLWithPath: $0, isDirectory: true).absoluteString
-        }.map(escapeForHTML)
         return """
         <!DOCTYPE html>
         <html>
@@ -814,7 +810,6 @@ enum MarkdownRenderer {
                     if (!markdownRoot) {
                         return;
                     }
-                    var projectRootHref = \(projectRootHref.map { "\"\($0)\"" } ?? "null");
                     var images = markdownRoot.querySelectorAll('img[src]');
                     images.forEach(function(image) {
                         var rawSrc = image.getAttribute('src');
@@ -827,21 +822,11 @@ enum MarkdownRenderer {
                         }
                         var lower = trimmed.toLowerCase();
                         var hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed);
-                        if (hasScheme || trimmed.startsWith('//') || lower.startsWith('data:') || lower.startsWith('blob:') || trimmed.startsWith('/')) {
+                        if (hasScheme || trimmed.startsWith('//') || lower.startsWith('data:') || lower.startsWith('blob:')) {
                             return;
                         }
                         try {
-                            var resolved = null;
-                            if (trimmed.startsWith('./') || trimmed.startsWith('../')) {
-                                resolved = new URL(trimmed, document.baseURI).href;
-                            } else if (projectRootHref) {
-                                resolved = new URL(trimmed, projectRootHref).href;
-                            } else {
-                                resolved = new URL(trimmed, document.baseURI).href;
-                            }
-                            if (resolved) {
-                                image.setAttribute('src', resolved);
-                            }
+                            image.setAttribute('src', new URL(trimmed, document.baseURI).href);
                         } catch (_) {}
                     });
                 }

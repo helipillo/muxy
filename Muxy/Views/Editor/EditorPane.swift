@@ -162,7 +162,6 @@ struct EditorPane: View {
         MarkdownRenderer.html(
             content: renderedMarkdownContent,
             filePath: state.filePath,
-            projectPath: state.projectPath,
             bgColor: ghostty.backgroundColor,
             fgColor: ghostty.foregroundColor,
             accentColor: ghostty.accentColor

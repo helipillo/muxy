@@ -83,3 +83,8 @@ When filing issues, include:
 - reproduction steps
 - what changed (scroll, resize, image load, Mermaid render)
 - expected vs actual behavior
+
+## Automated checks
+
+- [x] `swift build` (2026-04-23)
+- [x] `swift test` (2026-04-23)

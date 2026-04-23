@@ -132,18 +132,21 @@ struct EditorPane: View {
                 MarkdownWebView(
                     html: renderedMarkdownHTML,
                     filePath: state.filePath,
-                    scrollPosition: $state.markdownScrollPosition,
-                    editorScrollY: state.markdownEditorScrollY,
-                    editorMaxScrollY: state.markdownEditorMaxScrollY,
-                    scrollSyncEnabled: usesLinkedMarkdownScrolling,
-                    showsVerticalScroller: !usesLinkedMarkdownScrolling,
-                    hidesContentScrollbar: usesLinkedMarkdownScrolling,
-                    linkedScrollEnabled: usesLinkedMarkdownScrolling,
-                    onScrollProgressChanged: nil,
-                    onLinkedScrollWheel: { deltaY in
-                        guard usesLinkedMarkdownScrolling else { return }
-                        state.forwardLinkedMarkdownScroll(deltaY: deltaY)
-                    }
+                    syncScrollRequest: $state.markdownPreviewScrollRequest,
+                    syncScrollRequestVersion: state.markdownPreviewScrollRequestVersion,
+                    scrollSyncEnabled: usesMarkdownAnchorSync,
+                    showsVerticalScroller: true,
+                    hidesContentScrollbar: false,
+                    onSyncPointChanged: { point in
+                        let lineCount = state.backingStore?.lineCount ?? 0
+                        let output = state.markdownSyncCoordinator.previewDidScroll(point: point, totalLineCount: lineCount)
+                        state.applyMarkdownSyncOutput(output)
+                    },
+                    onLayoutChanged: {
+                        let output = state.markdownSyncCoordinator.previewDidRelayout()
+                        state.applyMarkdownSyncOutput(output)
+                    },
+                    onAnchorGeometryChanged: nil
                 )
             }
         }
@@ -165,7 +168,7 @@ struct EditorPane: View {
         )
     }
 
-    private var usesLinkedMarkdownScrolling: Bool {
+    private var usesMarkdownAnchorSync: Bool {
         state.markdownViewMode == .split && state.markdownScrollSyncEnabled && !shouldDelayMarkdownPreview
     }
 

@@ -31,17 +31,21 @@ private enum MarkdownWebBridge {
             || document.scrollingElement
             || document.documentElement
             || document.body;
+
         const report = () => {
             const root = scrollRoot();
             if (!root) return;
-            const maxScrollY = Math.max(0, root.scrollHeight - root.clientHeight);
-            const progress = maxScrollY > 0 ? root.scrollTop / maxScrollY : 0;
-            handler.postMessage(progress);
+            handler.postMessage({
+                scrollTop: root.scrollTop,
+                scrollHeight: root.scrollHeight,
+                clientHeight: root.clientHeight,
+            });
         };
 
         const attach = () => {
             const root = scrollRoot();
             if (!root) return;
+
             root.addEventListener('scroll', report, { passive: true });
             root.addEventListener('wheel', event => {
                 if (!wheelHandler) return;
@@ -59,8 +63,14 @@ private enum MarkdownWebBridge {
     })();
     """#
 
-    static func scrollToProgressScript(_ progress: CGFloat) -> String {
-        let clamped = min(max(progress, 0), 1)
+    static func scrollToSyncPointScript(_ point: MarkdownSyncPoint) -> String {
+        let escapedAnchorID = point.anchorID
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let anchorLine = max(point.startLine, 1)
+        let startLine = max(point.startLine, 1)
+        let endLine = max(point.endLine, startLine)
+        let progress = min(max(point.localProgress, 0), 1)
         return """
         (() => {
             const root = document.getElementById('content')
@@ -68,43 +78,37 @@ private enum MarkdownWebBridge {
                 || document.documentElement
                 || document.body;
             if (!root) return;
-            const maxScrollY = Math.max(0, root.scrollHeight - root.clientHeight);
-            root.scrollTop = maxScrollY * \(clamped);
-        })();
-        """
-    }
 
-    static func scrollToLinkedEditorPositionScript(
-        editorScrollY: CGFloat,
-        editorMaxScrollY: CGFloat,
-        progress: CGFloat
-    ) -> String {
-        let clampedEditorScrollY = max(editorScrollY, 0)
-        let clampedEditorMaxScrollY = max(editorMaxScrollY, 0)
-        let clampedProgress = min(max(progress, 0), 1)
-        return """
-        (() => {
-            const root = document.getElementById('content')
-                || document.scrollingElement
-                || document.documentElement
-                || document.body;
-            if (!root) return;
-            const previewMaxScrollY = Math.max(0, root.scrollHeight - root.clientHeight);
-            if (previewMaxScrollY <= 0) {
-                root.scrollTop = 0;
-                return;
-            }
-            const editorScrollY = \(clampedEditorScrollY);
-            const editorMaxScrollY = \(clampedEditorMaxScrollY);
-            const fallbackProgress = \(clampedProgress);
-            if (!Number.isFinite(editorScrollY) || !Number.isFinite(editorMaxScrollY) || editorMaxScrollY <= 0) {
-                root.scrollTop = previewMaxScrollY * fallbackProgress;
-                return;
-            }
-            const progress = Math.min(Math.max(editorScrollY / editorMaxScrollY, 0), 1);
-            const extraScrollY = Math.max(0, previewMaxScrollY - editorMaxScrollY);
-            const targetY = editorScrollY + Math.pow(progress, 2.2) * extraScrollY;
-            root.scrollTop = Math.min(Math.max(targetY, 0), previewMaxScrollY);
+            const desiredStart = \(startLine);
+            const desiredEnd = \(endLine);
+            const desiredLine = \(anchorLine);
+            const localProgress = \(progress);
+            const desiredAnchorID = "\(escapedAnchorID)";
+
+            const rootRect = root.getBoundingClientRect();
+            const nodes = Array.from(document.querySelectorAll('[data-muxy-line-start][data-muxy-line-end]'));
+            if (!nodes.length) return;
+
+            const candidate = nodes.find(el => {
+                const anchorID = el.getAttribute('data-muxy-anchor-id');
+                return anchorID && anchorID === desiredAnchorID;
+            }) || nodes.find(el => {
+                const s = parseInt(el.getAttribute('data-muxy-line-start') || '0', 10);
+                const e = parseInt(el.getAttribute('data-muxy-line-end') || '0', 10);
+                return s === desiredStart && e === desiredEnd;
+            }) || nodes.find(el => {
+                const s = parseInt(el.getAttribute('data-muxy-line-start') || '0', 10);
+                const e = parseInt(el.getAttribute('data-muxy-line-end') || '0', 10);
+                return s <= desiredLine && desiredLine <= e;
+            }) || nodes[0];
+
+            const rect = candidate.getBoundingClientRect();
+            const top = rect.top - rootRect.top + root.scrollTop;
+            const height = Math.max(1, rect.height);
+
+            window.__muxyProgrammaticScroll = true;
+            root.scrollTop = top + localProgress * height;
+            setTimeout(() => { window.__muxyProgrammaticScroll = false; }, 180);
         })();
         """
     }
@@ -115,25 +119,22 @@ struct MarkdownWebView: NSViewRepresentable {
         let scrollSyncEnabled: Bool
         let showsVerticalScroller: Bool
         let hidesContentScrollbar: Bool
-        let linkedScrollEnabled: Bool
-        let editorScrollY: CGFloat
-        let editorMaxScrollY: CGFloat
-        let onScrollProgressChanged: ((CGFloat) -> Void)?
-        let onLinkedScrollWheel: ((CGFloat) -> Void)?
+        let syncScrollRequestVersion: Int
+        let syncScrollRequest: MarkdownSyncPoint?
+        let onSyncPointChanged: ((MarkdownSyncPoint) -> Void)?
+        let onLayoutChanged: (() -> Void)?
         let onAnchorGeometryChanged: (([MarkdownPreviewAnchorGeometry]) -> Void)?
     }
 
     let html: String
     let filePath: String?
-    @Binding var scrollPosition: CGFloat
-    var editorScrollY: CGFloat = 0
-    var editorMaxScrollY: CGFloat = 0
+    @Binding var syncScrollRequest: MarkdownSyncPoint?
+    let syncScrollRequestVersion: Int
     var scrollSyncEnabled = true
     var showsVerticalScroller = true
     var hidesContentScrollbar = false
-    var linkedScrollEnabled = false
-    var onScrollProgressChanged: ((CGFloat) -> Void)?
-    var onLinkedScrollWheel: ((CGFloat) -> Void)?
+    var onSyncPointChanged: ((MarkdownSyncPoint) -> Void)?
+    var onLayoutChanged: (() -> Void)?
     var onAnchorGeometryChanged: (([MarkdownPreviewAnchorGeometry]) -> Void)?
 
     private var configuration: Configuration {
@@ -141,11 +142,10 @@ struct MarkdownWebView: NSViewRepresentable {
             scrollSyncEnabled: scrollSyncEnabled,
             showsVerticalScroller: showsVerticalScroller,
             hidesContentScrollbar: hidesContentScrollbar,
-            linkedScrollEnabled: linkedScrollEnabled,
-            editorScrollY: editorScrollY,
-            editorMaxScrollY: editorMaxScrollY,
-            onScrollProgressChanged: onScrollProgressChanged,
-            onLinkedScrollWheel: onLinkedScrollWheel,
+            syncScrollRequestVersion: syncScrollRequestVersion,
+            syncScrollRequest: syncScrollRequest,
+            onSyncPointChanged: onSyncPointChanged,
+            onLayoutChanged: onLayoutChanged,
             onAnchorGeometryChanged: onAnchorGeometryChanged
         )
     }
@@ -164,9 +164,8 @@ struct MarkdownWebView: NSViewRepresentable {
         context.coordinator.updateScrollerVisibility(in: webView)
         if scrollSyncEnabled {
             context.coordinator.applyPreferredScroll(
-                progress: scrollPosition,
-                editorScrollY: editorScrollY,
-                editorMaxScrollY: editorMaxScrollY,
+                requestVersion: syncScrollRequestVersion,
+                syncPoint: syncScrollRequest,
                 to: webView
             )
         }
@@ -181,8 +180,8 @@ struct MarkdownWebView: NSViewRepresentable {
         context.coordinator.updateContentScrollbarVisibility(in: webView)
         context.coordinator.updateHTML(
             html,
-            scrollPosition: scrollPosition,
-            scrollSyncEnabled: scrollSyncEnabled,
+            syncScrollRequest: syncScrollRequest,
+            syncScrollRequestVersion: syncScrollRequestVersion,
             filePath: filePath,
             webView: webView
         )
@@ -201,11 +200,10 @@ struct MarkdownWebView: NSViewRepresentable {
         private static let programmaticScrollSuppressionWindow: TimeInterval = 0.2
 
         private var lastHTML: String = ""
-        private var lastScrollProgress: CGFloat = -1
-        private var lastReportedScrollProgress: CGFloat = -1
-        private var pendingScrollProgress: CGFloat?
-        private var pendingEditorScrollY: CGFloat?
-        private var pendingEditorMaxScrollY: CGFloat?
+        private var lastAppliedSyncRequestVersion: Int = -1
+        private var lastReportedScrollTop: CGFloat = -1
+        private var pendingSyncPoint: MarkdownSyncPoint?
+        private var pendingSyncRequestVersion: Int = -1
         private var activeNavigation: WKNavigation?
         private var loadCount: Int = 0
         private var currentFilePath: String?
@@ -213,11 +211,8 @@ struct MarkdownWebView: NSViewRepresentable {
         private var lastConfiguredScrollSyncEnabled = true
         private var showsVerticalScroller = true
         private var hidesContentScrollbar = false
-        private var linkedScrollEnabled = false
-        private var editorScrollY: CGFloat = 0
-        private var editorMaxScrollY: CGFloat = 0
-        private var onScrollProgressChanged: ((CGFloat) -> Void)?
-        private var onLinkedScrollWheel: ((CGFloat) -> Void)?
+        private var onSyncPointChanged: ((MarkdownSyncPoint) -> Void)?
+        private var onLayoutChanged: (() -> Void)?
         private var onAnchorGeometryChanged: (([MarkdownPreviewAnchorGeometry]) -> Void)?
         private var isApplyingProgrammaticScroll = false
         private var isNavigationInFlight = false
@@ -228,11 +223,8 @@ struct MarkdownWebView: NSViewRepresentable {
             scrollSyncEnabled = configuration.scrollSyncEnabled
             showsVerticalScroller = configuration.showsVerticalScroller
             hidesContentScrollbar = configuration.hidesContentScrollbar
-            linkedScrollEnabled = configuration.linkedScrollEnabled
-            editorScrollY = configuration.editorScrollY
-            editorMaxScrollY = configuration.editorMaxScrollY
-            onScrollProgressChanged = configuration.onScrollProgressChanged
-            onLinkedScrollWheel = configuration.onLinkedScrollWheel
+            onSyncPointChanged = configuration.onSyncPointChanged
+            onLayoutChanged = configuration.onLayoutChanged
             onAnchorGeometryChanged = configuration.onAnchorGeometryChanged
         }
 
@@ -254,9 +246,6 @@ struct MarkdownWebView: NSViewRepresentable {
                 if (!root) return;
                 root.classList.toggle('muxy-hide-content-scrollbar', \(
                     hideScrollbar
-                ));
-                root.classList.toggle('muxy-linked-scroll', \(
-                    linkedScrollEnabled ? "true" : "false"
                 ));
             })();
             """
@@ -301,7 +290,8 @@ struct MarkdownWebView: NSViewRepresentable {
         func loadHTML(_ html: String, filePath: String?, into webView: WKWebView) {
             lastHTML = html
             currentFilePath = filePath
-            lastScrollProgress = -1
+            lastAppliedSyncRequestVersion = -1
+            lastReportedScrollTop = -1
             loadCount += 1
             isNavigationInFlight = true
             markdownWebLogger.debug(
@@ -312,8 +302,8 @@ struct MarkdownWebView: NSViewRepresentable {
 
         func updateHTML(
             _ html: String,
-            scrollPosition: CGFloat,
-            scrollSyncEnabled: Bool,
+            syncScrollRequest: MarkdownSyncPoint?,
+            syncScrollRequestVersion: Int,
             filePath: String?,
             webView: WKWebView
         ) {
@@ -322,28 +312,23 @@ struct MarkdownWebView: NSViewRepresentable {
             currentFilePath = filePath
             if html != lastHTML {
                 lastHTML = html
-                pendingScrollProgress = scrollSyncEnabled ? scrollPosition : nil
-                pendingEditorScrollY = scrollSyncEnabled ? editorScrollY : nil
-                pendingEditorMaxScrollY = scrollSyncEnabled ? editorMaxScrollY : nil
-                lastScrollProgress = -1
+                pendingSyncPoint = scrollSyncEnabled ? syncScrollRequest : nil
+                pendingSyncRequestVersion = scrollSyncEnabled ? syncScrollRequestVersion : -1
+                lastAppliedSyncRequestVersion = -1
                 loadCount += 1
                 isNavigationInFlight = true
                 markdownWebLogger.debug(
                     """
                     Markdown web update seq=\(self.loadCount)
                     path=\(filePath ?? "<nil>", privacy: .public)
-                    htmlLength=\(html.utf8.count) pendingScrollProgress=\(scrollPosition)
+                    htmlLength=\(html.utf8.count) pendingSyncRequestVersion=\(syncScrollRequestVersion)
                     """
                 )
                 activeNavigation = webView.loadHTMLString(html, baseURL: nil)
-            } else if scrollSyncEnabled,
-                      syncWasJustEnabled || scrollPosition != lastScrollProgress,
-                      scrollPosition >= 0
-            {
+            } else if scrollSyncEnabled, syncWasJustEnabled || syncScrollRequestVersion != lastAppliedSyncRequestVersion {
                 applyPreferredScroll(
-                    progress: scrollPosition,
-                    editorScrollY: editorScrollY,
-                    editorMaxScrollY: editorMaxScrollY,
+                    requestVersion: syncScrollRequestVersion,
+                    syncPoint: syncScrollRequest,
                     to: webView
                 )
             }
@@ -392,16 +377,13 @@ struct MarkdownWebView: NSViewRepresentable {
             )
             isNavigationInFlight = false
             lastAnchorGeometrySnapshot = []
-            if let pending = pendingScrollProgress {
-                pendingScrollProgress = nil
-                let pendingEditorScrollY = pendingEditorScrollY
-                let pendingEditorMaxScrollY = pendingEditorMaxScrollY
-                self.pendingEditorScrollY = nil
-                self.pendingEditorMaxScrollY = nil
+            if let pendingSyncPoint {
+                let pendingRequestVersion = pendingSyncRequestVersion
+                self.pendingSyncPoint = nil
+                pendingSyncRequestVersion = -1
                 applyPreferredScroll(
-                    progress: pending,
-                    editorScrollY: pendingEditorScrollY ?? editorScrollY,
-                    editorMaxScrollY: pendingEditorMaxScrollY ?? editorMaxScrollY,
+                    requestVersion: pendingRequestVersion,
+                    syncPoint: pendingSyncPoint,
                     to: webView
                 )
             }
@@ -447,15 +429,6 @@ struct MarkdownWebView: NSViewRepresentable {
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            if message.name == MarkdownWebBridge.wheelHandlerName {
-                guard linkedScrollEnabled,
-                      let payload = message.body as? [String: Any],
-                      let deltaY = payload["deltaY"] as? Double
-                else { return }
-                onLinkedScrollWheel?(CGFloat(deltaY))
-                return
-            }
-
             if message.name == MarkdownPreviewAnchorGeometryBridge.geometryHandlerName {
                 guard !isNavigationInFlight else { return }
                 handleAnchorGeometryMessage(message.body)
@@ -465,74 +438,105 @@ struct MarkdownWebView: NSViewRepresentable {
             guard message.name == MarkdownWebBridge.scrollHandlerName,
                   scrollSyncEnabled,
                   !isNavigationInFlight,
-                  let progress = message.body as? Double
+                  let payload = message.body as? [String: Any],
+                  let scrollTopNumber = payload["scrollTop"] as? NSNumber
             else { return }
 
-            let clampedProgress = min(max(CGFloat(progress), 0), 1)
+            let scrollTop = CGFloat(truncating: scrollTopNumber)
 
             if let suppressionUntil = programmaticScrollSuppressionUntil, Date() < suppressionUntil {
-                lastReportedScrollProgress = clampedProgress
+                lastReportedScrollTop = scrollTop
                 return
             }
 
             programmaticScrollSuppressionUntil = nil
 
-            if isApplyingProgrammaticScroll, abs(clampedProgress - lastScrollProgress) <= 0.0005 {
+            if isApplyingProgrammaticScroll, abs(scrollTop - lastReportedScrollTop) <= 0.5 {
                 isApplyingProgrammaticScroll = false
-                lastReportedScrollProgress = clampedProgress
+                lastReportedScrollTop = scrollTop
                 return
             }
 
             if isApplyingProgrammaticScroll {
                 isApplyingProgrammaticScroll = false
-                lastReportedScrollProgress = clampedProgress
+                lastReportedScrollTop = scrollTop
                 return
             }
 
-            guard abs(lastReportedScrollProgress - clampedProgress) > 0.0005 else { return }
-            lastReportedScrollProgress = clampedProgress
-            lastScrollProgress = clampedProgress
-            onScrollProgressChanged?(clampedProgress)
+            guard abs(lastReportedScrollTop - scrollTop) > 0.5 else { return }
+            lastReportedScrollTop = scrollTop
+            guard let point = syncPoint(forScrollTop: scrollTop, snapshot: lastAnchorGeometrySnapshot) else {
+                return
+            }
+            onSyncPointChanged?(point)
         }
 
-        func applyScrollProgress(_ progress: CGFloat, to webView: WKWebView) {
-            guard progress >= 0 else { return }
-
-            let clampedProgress = min(max(progress, 0), 1)
-            guard abs(lastScrollProgress - clampedProgress) > 0.0005 else { return }
+        func applyPreferredScroll(
+            requestVersion: Int,
+            syncPoint: MarkdownSyncPoint?,
+            to webView: WKWebView
+        ) {
+            guard let syncPoint else { return }
+            guard requestVersion != lastAppliedSyncRequestVersion else { return }
 
             isApplyingProgrammaticScroll = true
             programmaticScrollSuppressionUntil = Date().addingTimeInterval(Self.programmaticScrollSuppressionWindow)
-            let script = MarkdownWebBridge.scrollToProgressScript(clampedProgress)
+            let script = MarkdownWebBridge.scrollToSyncPointScript(syncPoint)
             webView.evaluateJavaScript(script) { _, error in
                 if let error {
                     self.isApplyingProgrammaticScroll = false
                     self.programmaticScrollSuppressionUntil = nil
                     markdownWebLogger.error(
                         """
-                        Failed applying markdown scroll progress
+                        Failed applying markdown sync scroll
                         reason=\(error.localizedDescription, privacy: .public)
                         """
                     )
                     return
                 }
 
-                self.lastScrollProgress = clampedProgress
+                self.lastAppliedSyncRequestVersion = requestVersion
             }
         }
 
-        func applyPreferredScroll(
-            progress: CGFloat,
-            editorScrollY: CGFloat,
-            editorMaxScrollY: CGFloat,
-            to webView: WKWebView
-        ) {
-            guard progress >= 0 else { return }
-            _ = editorScrollY
-            _ = editorMaxScrollY
+        private func syncPoint(
+            forScrollTop scrollTop: CGFloat,
+            snapshot: [MarkdownPreviewAnchorGeometry]
+        ) -> MarkdownSyncPoint? {
+            struct GeometryCandidate {
+                let geometry: MarkdownPreviewAnchorGeometry
+                let startLine: Int
+                let endLine: Int
+            }
 
-            let clampedProgress = min(max(progress, 0), 1)
-            applyScrollProgress(clampedProgress, to: webView)
+            let candidates: [GeometryCandidate] = snapshot.compactMap { geometry in
+                guard let startLine = geometry.startLine, let endLine = geometry.endLine else {
+                    return nil
+                }
+                return GeometryCandidate(geometry: geometry, startLine: startLine, endLine: endLine)
+            }
+
+            guard let first = candidates.first else {
+                return nil
+            }
+
+            var active = first
+            for candidate in candidates {
+                if candidate.geometry.top <= scrollTop + 4 {
+                    active = candidate
+                    continue
+                }
+                break
+            }
+
+            let height = max(active.geometry.height, 1)
+            let progress = min(max((scrollTop - active.geometry.top) / height, 0), 1)
+            return MarkdownSyncPoint(
+                anchorID: active.geometry.anchorID,
+                startLine: active.startLine,
+                endLine: active.endLine,
+                localProgress: progress
+            )
         }
 
         private func logNavigationFailure(kind: String, navigation: WKNavigation!, error: Error) {
@@ -633,6 +637,7 @@ struct MarkdownWebView: NSViewRepresentable {
             lastAnchorGeometrySnapshot = geometries
             logAnchorGeometryIssuesIfNeeded(geometries)
             onAnchorGeometryChanged?(geometries)
+            onLayoutChanged?()
         }
 
         private func geometrySnapshotIsMeaningfullyDifferent(
@@ -682,8 +687,10 @@ struct MarkdownWebView: NSViewRepresentable {
                 previousTop = geometry.top
             }
 
+            let first = snapshot.first?.anchorID ?? "<nil>"
+            let last = snapshot.last?.anchorID ?? "<nil>"
             markdownWebLogger.debug(
-                "Markdown anchor geometry snapshot count=\(snapshot.count) first=\(snapshot.first?.anchorID ?? "<nil>") last=\(snapshot.last?.anchorID ?? "<nil>")"
+                "Markdown anchor geometry snapshot count=\(snapshot.count) first=\(first) last=\(last)"
             )
         }
     }

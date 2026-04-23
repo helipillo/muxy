@@ -80,7 +80,16 @@ final class EditorTabState: Identifiable {
     var markdownActiveAnchorID: String?
     var markdownActiveAnchorLocalProgress: Double = 0
 
+    var markdownPreviewScrollRequestVersion: Int = 0
+    var markdownPreviewScrollRequest: MarkdownSyncPoint?
+    var markdownEditorScrollRequestVersion: Int = 0
+    var markdownEditorScrollRequestLine: Int?
+
     @ObservationIgnored private weak var linkedMarkdownEditorScrollView: NSScrollView?
+
+    @ObservationIgnored let markdownSyncCoordinator = MarkdownSyncCoordinator()
+    @ObservationIgnored private var markdownSyncAnchorsCache: [MarkdownSyncAnchor] = []
+    @ObservationIgnored private var markdownSyncAnchorsCacheVersion: Int = -1
 
     static let largeFileWarningThreshold: Int64 = 5 * 1024 * 1024
     static let largeFileRefuseThreshold: Int64 = 50 * 1024 * 1024
@@ -165,6 +174,28 @@ final class EditorTabState: Identifiable {
         markdownScrollDriver = .editor
         scrollView.contentView.setBoundsOrigin(NSPoint(x: scrollView.contentView.bounds.origin.x, y: targetY))
         scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    func markdownSyncAnchors() -> [MarkdownSyncAnchor] {
+        guard isMarkdownFile else { return [] }
+        guard let backingStore else { return [] }
+        guard markdownSyncAnchorsCacheVersion != backingStoreVersion else {
+            return markdownSyncAnchorsCache
+        }
+        markdownSyncAnchorsCache = MarkdownAnchorParser.parseAnchors(in: backingStore.fullText())
+        markdownSyncAnchorsCacheVersion = backingStoreVersion
+        return markdownSyncAnchorsCache
+    }
+
+    func applyMarkdownSyncOutput(_ output: MarkdownSyncCoordinator.Output) {
+        if let point = output.requestPreviewScroll {
+            markdownPreviewScrollRequest = point
+            markdownPreviewScrollRequestVersion += 1
+        }
+        if let line = output.requestEditorScrollLine {
+            markdownEditorScrollRequestLine = line
+            markdownEditorScrollRequestVersion += 1
+        }
     }
 
     deinit {

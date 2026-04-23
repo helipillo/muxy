@@ -109,8 +109,13 @@ private enum MarkdownWebBridge {
             var target = top + localProgress * height;
 
             const firstNode = nodes[0];
+            const lastNode = nodes[nodes.length - 1];
             if (candidate === firstNode && localProgress <= 0.001) {
                 target = 0;
+            }
+            if (candidate === lastNode && localProgress >= 0.999) {
+                const alignedBottomTarget = Math.max(0, top + height - root.clientHeight);
+                target = Math.min(target, alignedBottomTarget);
             }
 
             target = Math.min(maxScrollTop, Math.max(0, target));

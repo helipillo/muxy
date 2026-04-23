@@ -58,8 +58,8 @@ enum MarkdownEditorAnchorMapper {
     }
 }
 
-extension Array {
-    fileprivate func partitioningIndex(where shouldInsertBefore: (Element) -> Bool) -> Int {
+private extension Array {
+    func partitioningIndex(where shouldInsertBefore: (Element) -> Bool) -> Int {
         var low = 0
         var high = count
         while low < high {

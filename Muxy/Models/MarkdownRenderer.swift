@@ -801,6 +801,31 @@ enum MarkdownRenderer {
                     });
                 }
 
+                function normalizeLocalImageSources(markdownRoot) {
+                    if (!markdownRoot) {
+                        return;
+                    }
+                    var images = markdownRoot.querySelectorAll('img[src]');
+                    images.forEach(function(image) {
+                        var rawSrc = image.getAttribute('src');
+                        if (!rawSrc) {
+                            return;
+                        }
+                        var trimmed = rawSrc.trim();
+                        if (!trimmed) {
+                            return;
+                        }
+                        var lower = trimmed.toLowerCase();
+                        var hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed);
+                        if (hasScheme || trimmed.startsWith('//') || lower.startsWith('data:') || lower.startsWith('blob:')) {
+                            return;
+                        }
+                        try {
+                            image.setAttribute('src', new URL(trimmed, document.baseURI).href);
+                        } catch (_) {}
+                    });
+                }
+
                 function assignAnchorMetadata(markdownRoot, anchors) {
                     if (!markdownRoot || !anchors || !anchors.length) {
                         return;
@@ -860,6 +885,7 @@ enum MarkdownRenderer {
 
                     var html = marked.parse(content);
                     document.getElementById('markdown').innerHTML = html;
+                    normalizeLocalImageSources(document.getElementById('markdown'));
                     assignAnchorMetadata(document.getElementById('markdown'), anchors);
                     initializeMermaidControls();
 

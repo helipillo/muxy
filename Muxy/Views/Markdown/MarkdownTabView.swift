@@ -120,6 +120,7 @@ struct MarkdownWebView: NSViewRepresentable {
         let editorMaxScrollY: CGFloat
         let onScrollProgressChanged: ((CGFloat) -> Void)?
         let onLinkedScrollWheel: ((CGFloat) -> Void)?
+        let onAnchorGeometryChanged: (([MarkdownPreviewAnchorGeometry]) -> Void)?
     }
 
     let html: String
@@ -133,6 +134,7 @@ struct MarkdownWebView: NSViewRepresentable {
     var linkedScrollEnabled = false
     var onScrollProgressChanged: ((CGFloat) -> Void)?
     var onLinkedScrollWheel: ((CGFloat) -> Void)?
+    var onAnchorGeometryChanged: (([MarkdownPreviewAnchorGeometry]) -> Void)?
 
     private var configuration: Configuration {
         Configuration(
@@ -143,7 +145,8 @@ struct MarkdownWebView: NSViewRepresentable {
             editorScrollY: editorScrollY,
             editorMaxScrollY: editorMaxScrollY,
             onScrollProgressChanged: onScrollProgressChanged,
-            onLinkedScrollWheel: onLinkedScrollWheel
+            onLinkedScrollWheel: onLinkedScrollWheel,
+            onAnchorGeometryChanged: onAnchorGeometryChanged
         )
     }
 
@@ -189,6 +192,8 @@ struct MarkdownWebView: NSViewRepresentable {
         webView.navigationDelegate = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: MarkdownWebBridge.scrollHandlerName)
         webView.configuration.userContentController.removeScriptMessageHandler(forName: MarkdownWebBridge.wheelHandlerName)
+        webView.configuration.userContentController
+            .removeScriptMessageHandler(forName: MarkdownPreviewAnchorGeometryBridge.geometryHandlerName)
         coordinator.removeScrollObserver()
     }
 
@@ -213,9 +218,11 @@ struct MarkdownWebView: NSViewRepresentable {
         private var editorMaxScrollY: CGFloat = 0
         private var onScrollProgressChanged: ((CGFloat) -> Void)?
         private var onLinkedScrollWheel: ((CGFloat) -> Void)?
+        private var onAnchorGeometryChanged: (([MarkdownPreviewAnchorGeometry]) -> Void)?
         private var isApplyingProgrammaticScroll = false
         private var isNavigationInFlight = false
         private var programmaticScrollSuppressionUntil: Date?
+        private var lastAnchorGeometrySnapshot: [MarkdownPreviewAnchorGeometry] = []
 
         func configure(with configuration: Configuration) {
             scrollSyncEnabled = configuration.scrollSyncEnabled
@@ -226,6 +233,7 @@ struct MarkdownWebView: NSViewRepresentable {
             editorMaxScrollY = configuration.editorMaxScrollY
             onScrollProgressChanged = configuration.onScrollProgressChanged
             onLinkedScrollWheel = configuration.onLinkedScrollWheel
+            onAnchorGeometryChanged = configuration.onAnchorGeometryChanged
         }
 
         func updateScrollerVisibility(in webView: WKWebView) {
@@ -264,12 +272,21 @@ struct MarkdownWebView: NSViewRepresentable {
         func installBridge(into configuration: WKWebViewConfiguration) {
             configuration.userContentController.removeScriptMessageHandler(forName: MarkdownWebBridge.scrollHandlerName)
             configuration.userContentController.removeScriptMessageHandler(forName: MarkdownWebBridge.wheelHandlerName)
+            configuration.userContentController.removeScriptMessageHandler(forName: MarkdownPreviewAnchorGeometryBridge.geometryHandlerName)
             configuration.userContentController.removeAllUserScripts()
             configuration.userContentController.add(self, name: MarkdownWebBridge.scrollHandlerName)
             configuration.userContentController.add(self, name: MarkdownWebBridge.wheelHandlerName)
+            configuration.userContentController.add(self, name: MarkdownPreviewAnchorGeometryBridge.geometryHandlerName)
             configuration.userContentController.addUserScript(
                 WKUserScript(
                     source: MarkdownWebBridge.scrollObserverScript,
+                    injectionTime: .atDocumentEnd,
+                    forMainFrameOnly: true
+                )
+            )
+            configuration.userContentController.addUserScript(
+                WKUserScript(
+                    source: MarkdownPreviewAnchorGeometryBridge.observerScript,
                     injectionTime: .atDocumentEnd,
                     forMainFrameOnly: true
                 )
@@ -374,6 +391,7 @@ struct MarkdownWebView: NSViewRepresentable {
                 """
             )
             isNavigationInFlight = false
+            lastAnchorGeometrySnapshot = []
             if let pending = pendingScrollProgress {
                 pendingScrollProgress = nil
                 let pendingEditorScrollY = pendingEditorScrollY
@@ -386,6 +404,16 @@ struct MarkdownWebView: NSViewRepresentable {
                     editorMaxScrollY: pendingEditorMaxScrollY ?? editorMaxScrollY,
                     to: webView
                 )
+            }
+
+            webView.evaluateJavaScript(
+                MarkdownPreviewAnchorGeometryBridge.requestMeasureScript(reason: "swift-didFinish")
+            ) { _, error in
+                if let error {
+                    markdownWebLogger.error(
+                        "Failed requesting markdown anchor geometry: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
             }
             updateContentScrollbarVisibility(in: webView)
             collectJavaScriptErrors(from: webView)
@@ -425,6 +453,12 @@ struct MarkdownWebView: NSViewRepresentable {
                       let deltaY = payload["deltaY"] as? Double
                 else { return }
                 onLinkedScrollWheel?(CGFloat(deltaY))
+                return
+            }
+
+            if message.name == MarkdownPreviewAnchorGeometryBridge.geometryHandlerName {
+                guard !isNavigationInFlight else { return }
+                handleAnchorGeometryMessage(message.body)
                 return
             }
 
@@ -559,6 +593,98 @@ struct MarkdownWebView: NSViewRepresentable {
                     )
                 }
             }
+        }
+
+        private func handleAnchorGeometryMessage(_ body: Any) {
+            guard let payload = body as? [String: Any],
+                  let entries = payload["anchors"] as? [[String: Any]]
+            else {
+                return
+            }
+
+            let geometries = entries.compactMap { entry -> MarkdownPreviewAnchorGeometry? in
+                guard let anchorID = entry["anchorID"] as? String,
+                      let topNumber = entry["top"] as? NSNumber,
+                      let heightNumber = entry["height"] as? NSNumber
+                else {
+                    return nil
+                }
+
+                let startLine = (entry["startLine"] as? NSNumber)?.intValue
+                let endLine = (entry["endLine"] as? NSNumber)?.intValue
+                return MarkdownPreviewAnchorGeometry(
+                    anchorID: anchorID,
+                    startLine: startLine,
+                    endLine: endLine,
+                    top: CGFloat(truncating: topNumber),
+                    height: CGFloat(truncating: heightNumber)
+                )
+            }.sorted(by: { lhs, rhs in
+                if abs(lhs.top - rhs.top) > 0.5 {
+                    return lhs.top < rhs.top
+                }
+                return lhs.anchorID < rhs.anchorID
+            })
+
+            guard geometrySnapshotIsMeaningfullyDifferent(from: lastAnchorGeometrySnapshot, to: geometries) else {
+                return
+            }
+
+            lastAnchorGeometrySnapshot = geometries
+            logAnchorGeometryIssuesIfNeeded(geometries)
+            onAnchorGeometryChanged?(geometries)
+        }
+
+        private func geometrySnapshotIsMeaningfullyDifferent(
+            from lhs: [MarkdownPreviewAnchorGeometry],
+            to rhs: [MarkdownPreviewAnchorGeometry]
+        ) -> Bool {
+            if lhs.count != rhs.count {
+                return true
+            }
+
+            for (left, right) in zip(lhs, rhs) {
+                if left.anchorID != right.anchorID {
+                    return true
+                }
+                if left.startLine != right.startLine || left.endLine != right.endLine {
+                    return true
+                }
+                if abs(left.top - right.top) > 0.5 {
+                    return true
+                }
+                if abs(left.height - right.height) > 0.5 {
+                    return true
+                }
+            }
+
+            return false
+        }
+
+        private func logAnchorGeometryIssuesIfNeeded(_ snapshot: [MarkdownPreviewAnchorGeometry]) {
+            guard UserDefaults.standard.bool(forKey: "MuxyMarkdownAnchorGeometryDebug") else {
+                return
+            }
+
+            if snapshot.isEmpty {
+                markdownWebLogger.debug("Markdown anchor geometry snapshot empty")
+                return
+            }
+
+            var previousTop: CGFloat?
+            for geometry in snapshot {
+                if let previousTop, geometry.top + 0.25 < previousTop {
+                    markdownWebLogger.error(
+                        "Markdown anchor geometry out of order anchorID=\(geometry.anchorID, privacy: .public) top=\(geometry.top)"
+                    )
+                    break
+                }
+                previousTop = geometry.top
+            }
+
+            markdownWebLogger.debug(
+                "Markdown anchor geometry snapshot count=\(snapshot.count) first=\(snapshot.first?.anchorID ?? "<nil>") last=\(snapshot.last?.anchorID ?? "<nil>")"
+            )
         }
     }
 }

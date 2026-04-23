@@ -1154,7 +1154,7 @@ struct CodeEditorView: NSViewRepresentable {
             let visibleHeight = scrollView.contentView.bounds.height
             let documentHeight = scrollView.documentView?.bounds.height ?? 0
             let maxScrollY = max(0, documentHeight - visibleHeight)
-            let bottomThreshold: CGFloat = 1
+            let bottomThreshold = max(6, min(viewport.estimatedLineHeight * 0.3, 12))
             let isNearBottom = maxScrollY > 0 && scrollY >= maxScrollY - bottomThreshold
 
             let focusLine = if isNearBottom {

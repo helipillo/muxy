@@ -1204,7 +1204,11 @@ struct CodeEditorView: NSViewRepresentable {
             )
             let anchors = state.markdownSyncAnchors()
             let output = state.markdownSyncCoordinator.editorDidScroll(snapshot: snapshot, anchors: anchors)
-            state.applyMarkdownSyncOutput(output)
+            guard !output.isEmpty else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.state.applyMarkdownSyncOutput(output)
+            }
         }
 
         private var lastAppliedMarkdownEditorScrollRequestVersion: Int {

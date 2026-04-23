@@ -125,8 +125,6 @@ enum MarkdownPreviewAnchorGeometryBridge {
                 mutationObserver.observe(markdownRoot, {
                     subtree: true,
                     childList: true,
-                    attributes: true,
-                    attributeFilter: ['src', 'style', 'class'],
                 });
             }
 

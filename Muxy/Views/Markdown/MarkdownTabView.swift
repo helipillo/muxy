@@ -105,9 +105,18 @@ private enum MarkdownWebBridge {
             const rect = candidate.getBoundingClientRect();
             const top = rect.top - rootRect.top + root.scrollTop;
             const height = Math.max(1, rect.height);
+            const maxScrollTop = Math.max(0, root.scrollHeight - root.clientHeight);
+            var target = top + localProgress * height;
+
+            const firstNode = nodes[0];
+            if (candidate === firstNode && localProgress <= 0.001) {
+                target = 0;
+            }
+
+            target = Math.min(maxScrollTop, Math.max(0, target));
 
             window.__muxyProgrammaticScroll = true;
-            root.scrollTop = top + localProgress * height;
+            root.scrollTop = target;
             setTimeout(() => { window.__muxyProgrammaticScroll = false; }, 180);
         })();
         """
@@ -297,7 +306,7 @@ struct MarkdownWebView: NSViewRepresentable {
             markdownWebLogger.debug(
                 "Markdown web load seq=\(self.loadCount) path=\(filePath ?? "<nil>", privacy: .public) htmlLength=\(html.utf8.count)"
             )
-            activeNavigation = webView.loadHTMLString(html, baseURL: nil)
+            activeNavigation = webView.loadHTMLString(html, baseURL: baseURL(for: filePath))
         }
 
         func updateHTML(
@@ -324,7 +333,7 @@ struct MarkdownWebView: NSViewRepresentable {
                     htmlLength=\(html.utf8.count) pendingSyncRequestVersion=\(syncScrollRequestVersion)
                     """
                 )
-                activeNavigation = webView.loadHTMLString(html, baseURL: nil)
+                activeNavigation = webView.loadHTMLString(html, baseURL: baseURL(for: filePath))
             } else if scrollSyncEnabled, syncWasJustEnabled || syncScrollRequestVersion != lastAppliedSyncRequestVersion {
                 applyPreferredScroll(
                     requestVersion: syncScrollRequestVersion,
@@ -332,6 +341,12 @@ struct MarkdownWebView: NSViewRepresentable {
                     to: webView
                 )
             }
+        }
+
+        private func baseURL(for filePath: String?) -> URL? {
+            guard let filePath else { return nil }
+            let fileURL = URL(fileURLWithPath: filePath)
+            return fileURL.deletingLastPathComponent()
         }
 
         @MainActor

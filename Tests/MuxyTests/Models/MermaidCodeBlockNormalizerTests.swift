@@ -126,7 +126,7 @@ struct MermaidCodeBlockNormalizerTests {
         #expect(html.contains("data-muxy-anchor-id"))
         #expect(html.contains("data-muxy-line-start"))
         #expect(html.contains("data-muxy-line-end"))
-        #expect(html.contains("window.__muxySyncAnchors = []"))
+        #expect(html.contains("parseSyncAnchors(content)"))
         #expect(html.contains("muxy-anchor-block muxy-anchor-kind-"))
         #expect(html.contains("data-muxy-mermaid=\"true\""))
     }

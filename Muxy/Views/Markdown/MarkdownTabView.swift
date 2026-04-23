@@ -29,13 +29,14 @@ private enum MarkdownWebBridge {
 
         let attachedRoot = null;
         let wheelListener = null;
+        let reportScheduled = false;
 
         const scrollRoot = () => document.getElementById('content')
             || document.scrollingElement
             || document.documentElement
             || document.body;
 
-        const report = () => {
+        const reportNow = () => {
             const root = scrollRoot();
             if (!root) return;
             handler.postMessage({
@@ -45,17 +46,26 @@ private enum MarkdownWebBridge {
             });
         };
 
+        const scheduleReport = () => {
+            if (reportScheduled) return;
+            reportScheduled = true;
+            requestAnimationFrame(() => {
+                reportScheduled = false;
+                reportNow();
+            });
+        };
+
         const attach = () => {
             const root = scrollRoot();
             if (!root) return;
 
             if (attachedRoot === root) {
-                report();
+                scheduleReport();
                 return;
             }
 
             if (attachedRoot) {
-                attachedRoot.removeEventListener('scroll', report);
+                attachedRoot.removeEventListener('scroll', scheduleReport);
                 if (wheelListener) {
                     attachedRoot.removeEventListener('wheel', wheelListener);
                 }
@@ -70,12 +80,12 @@ private enum MarkdownWebBridge {
 
             attachedRoot = root;
 
-            root.addEventListener('scroll', report, { passive: true });
+            root.addEventListener('scroll', scheduleReport, { passive: true });
             root.addEventListener('wheel', wheelListener, { passive: false });
-            report();
+            scheduleReport();
         };
 
-        window.addEventListener('resize', report, { passive: true });
+        window.addEventListener('resize', scheduleReport, { passive: true });
         window.addEventListener('load', () => setTimeout(attach, 0));
         document.addEventListener('DOMContentLoaded', () => setTimeout(attach, 0));
         setTimeout(attach, 0);
@@ -699,7 +709,7 @@ struct MarkdownWebView: NSViewRepresentable {
                 return false
             }
 
-            let stableMarkers = ["swift-didfinish", "window-resize", "fonts-ready", "window-load", "dom-content-loaded", "manual"]
+            let stableMarkers = ["swift-didfinish", "window-resize", "fonts-ready", "manual"]
             return stableMarkers.contains(where: { normalized.contains($0) })
         }
 

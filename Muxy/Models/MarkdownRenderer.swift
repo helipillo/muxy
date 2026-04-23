@@ -417,6 +417,7 @@ enum MarkdownRenderer {
                 });
 
                 var _mermaidInitialized = false;
+                var _markedConfigured = false;
                 function decodeBase64UTF8(base64) {
                     try {
                         var binary = atob(base64);
@@ -435,6 +436,51 @@ enum MarkdownRenderer {
                     } catch (_) {
                         return '';
                     }
+                }
+
+                function escapeHTML(value) {
+                    return String(value || '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                }
+
+                function sanitizeURL(rawValue, options) {
+                    var value = String(rawValue || '').trim();
+                    if (!value) {
+                        return null;
+                    }
+
+                    if (value.startsWith('#')) {
+                        return value;
+                    }
+
+                    var lower = value.toLowerCase();
+                    if (value.startsWith('//') || lower.startsWith('javascript:') || lower.startsWith('vbscript:')) {
+                        return null;
+                    }
+
+                    var allowData = Boolean(options && options.allowData);
+                    var allowBlob = Boolean(options && options.allowBlob);
+                    if (lower.startsWith('data:')) {
+                        return allowData ? value : null;
+                    }
+                    if (lower.startsWith('blob:')) {
+                        return allowBlob ? value : null;
+                    }
+
+                    try {
+                        var resolved = new URL(value, document.baseURI);
+                        if (['http:', 'https:', 'mailto:', 'file:'].includes(resolved.protocol)) {
+                            return resolved.href;
+                        }
+                    } catch (_) {
+                        return null;
+                    }
+
+                    return null;
                 }
 
                 function loadScript(url) {
@@ -862,6 +908,39 @@ enum MarkdownRenderer {
 
                 async function renderMarkdown(content) {
                     var anchors = parseSyncAnchors(content);
+                    if (!_markedConfigured) {
+                        marked.use({
+                            renderer: {
+                                html: function(token) {
+                                    return escapeHTML((token && (token.text || token.raw)) || '');
+                                }
+                            },
+                            walkTokens: function(token) {
+                                if (!token || typeof token !== 'object') {
+                                    return;
+                                }
+
+                                if (token.type === 'link') {
+                                    var safeHref = sanitizeURL(token.href, { allowData: false, allowBlob: false });
+                                    if (safeHref) {
+                                        token.href = safeHref;
+                                    } else {
+                                        delete token.href;
+                                    }
+                                }
+
+                                if (token.type === 'image') {
+                                    var safeSrc = sanitizeURL(token.href, { allowData: true, allowBlob: true });
+                                    if (safeSrc) {
+                                        token.href = safeSrc;
+                                    } else {
+                                        delete token.href;
+                                    }
+                                }
+                            }
+                        });
+                        _markedConfigured = true;
+                    }
                     marked.setOptions({
                         highlight: function(code, lang) {
                             if (lang && hljs.getLanguage(lang)) {
@@ -914,7 +993,9 @@ enum MarkdownRenderer {
                                             var { svg } = await mermaid.render(id + '-svg', diagramMap[id]);
                                             el.innerHTML = svg;
                                         } catch (err) {
-                                            el.innerHTML = '<div class="mermaid-error">Diagram Error: ' + (err.message || err) + '</div>';
+                                            el.innerHTML = '<div class="mermaid-error">Diagram Error: '
+                                                + escapeHTML(err.message || err)
+                                                + '</div>';
                                         }
                                     }
                                 }

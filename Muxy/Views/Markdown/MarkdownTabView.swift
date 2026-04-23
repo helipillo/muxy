@@ -27,6 +27,9 @@ private enum MarkdownWebBridge {
         const wheelHandler = window.webkit?.messageHandlers?.muxyMarkdownWheel;
         if (!handler) return;
 
+        let attachedRoot = null;
+        let wheelListener = null;
+
         const scrollRoot = () => document.getElementById('content')
             || document.scrollingElement
             || document.documentElement
@@ -46,13 +49,29 @@ private enum MarkdownWebBridge {
             const root = scrollRoot();
             if (!root) return;
 
-            root.addEventListener('scroll', report, { passive: true });
-            root.addEventListener('wheel', event => {
+            if (attachedRoot === root) {
+                report();
+                return;
+            }
+
+            if (attachedRoot) {
+                attachedRoot.removeEventListener('scroll', report);
+                if (wheelListener) {
+                    attachedRoot.removeEventListener('wheel', wheelListener);
+                }
+            }
+
+            wheelListener = event => {
                 if (!wheelHandler) return;
                 if (!document.documentElement?.classList.contains('muxy-linked-scroll')) return;
                 wheelHandler.postMessage({ deltaY: event.deltaY });
                 event.preventDefault();
-            }, { passive: false });
+            };
+
+            attachedRoot = root;
+
+            root.addEventListener('scroll', report, { passive: true });
+            root.addEventListener('wheel', wheelListener, { passive: false });
             report();
         };
 

@@ -483,6 +483,71 @@ enum MarkdownRenderer {
                     return null;
                 }
 
+                function sanitizeMarkdownDOM(markdownRoot) {
+                    if (!markdownRoot) {
+                        return;
+                    }
+
+                    var blockedTags = new Set([
+                        'script', 'iframe', 'object', 'embed', 'meta', 'link', 'style', 'base',
+                        'form', 'input', 'button', 'textarea', 'select', 'option', 'frame',
+                        'frameset', 'applet', 'svg', 'math'
+                    ]);
+
+                    var elements = Array.from(markdownRoot.querySelectorAll('*'));
+                    elements.forEach(function(element) {
+                        var tag = (element.tagName || '').toLowerCase();
+                        if (!tag) {
+                            return;
+                        }
+
+                        if (blockedTags.has(tag)) {
+                            element.remove();
+                            return;
+                        }
+
+                        Array.from(element.attributes).forEach(function(attribute) {
+                            var name = String(attribute.name || '').toLowerCase();
+                            if (!name) {
+                                return;
+                            }
+
+                            if (name.startsWith('on') || name === 'srcdoc') {
+                                element.removeAttribute(attribute.name);
+                                return;
+                            }
+
+                            if (name === 'href') {
+                                var safeHref = sanitizeURL(attribute.value, { allowData: false, allowBlob: false });
+                                if (safeHref) {
+                                    element.setAttribute(attribute.name, safeHref);
+                                } else {
+                                    element.removeAttribute(attribute.name);
+                                }
+                                return;
+                            }
+
+                            if (name === 'src') {
+                                var isImageLike = ['img', 'source'].includes(tag);
+                                var safeSrc = sanitizeURL(attribute.value, {
+                                    allowData: isImageLike,
+                                    allowBlob: isImageLike,
+                                });
+                                if (safeSrc) {
+                                    element.setAttribute(attribute.name, safeSrc);
+                                } else {
+                                    element.removeAttribute(attribute.name);
+                                }
+                                return;
+                            }
+
+                            if (name === 'xlink:href') {
+                                element.removeAttribute(attribute.name);
+                            }
+                        });
+                    });
+                }
+
                 function loadScript(url) {
                     return new Promise(function(resolve, reject) {
                         var script = document.createElement('script');
@@ -910,11 +975,6 @@ enum MarkdownRenderer {
                     var anchors = parseSyncAnchors(content);
                     if (!_markedConfigured) {
                         marked.use({
-                            renderer: {
-                                html: function(token) {
-                                    return escapeHTML((token && (token.text || token.raw)) || '');
-                                }
-                            },
                             walkTokens: function(token) {
                                 if (!token || typeof token !== 'object') {
                                     return;
@@ -964,6 +1024,7 @@ enum MarkdownRenderer {
 
                     var html = marked.parse(content);
                     document.getElementById('markdown').innerHTML = html;
+                    sanitizeMarkdownDOM(document.getElementById('markdown'));
                     normalizeLocalImageSources(document.getElementById('markdown'));
                     assignAnchorMetadata(document.getElementById('markdown'), anchors);
                     initializeMermaidControls();

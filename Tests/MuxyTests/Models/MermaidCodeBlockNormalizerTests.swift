@@ -124,4 +124,26 @@ struct MermaidCodeBlockNormalizerTests {
         #expect(html.contains("muxy-anchor-block muxy-anchor-kind-"))
         #expect(html.contains("data-muxy-mermaid=\"true\""))
     }
+
+    @Test("MarkdownRenderer html sanitizes rendered DOM without disabling HTML images")
+    @MainActor
+    func markdownRendererSanitizesDOMButAllowsHTMLImages() {
+        let markdown = #"""
+        <img src="images/photo.png" alt="Photo" onclick="alert('x')">
+        <script>alert('x')</script>
+        [unsafe](javascript:alert('x'))
+        """#
+
+        let html = MarkdownRenderer.html(
+            content: markdown,
+            filePath: "/tmp/readme.md",
+            bgColor: NSColor.black,
+            fgColor: NSColor.white,
+            accentColor: NSColor.systemBlue
+        )
+
+        #expect(html.contains("sanitizeMarkdownDOM"))
+        #expect(!html.contains("renderer: {"))
+        #expect(html.contains("allowData: isImageLike"))
+    }
 }

@@ -483,7 +483,9 @@ struct MarkdownWebView: NSViewRepresentable {
             guard let point = syncPoint(forScrollTop: scrollTop, snapshot: lastAnchorGeometrySnapshot) else {
                 return
             }
-            onSyncPointChanged?(point)
+            DispatchQueue.main.async {
+                self.onSyncPointChanged?(point)
+            }
         }
 
         func applyPreferredScroll(
@@ -651,8 +653,10 @@ struct MarkdownWebView: NSViewRepresentable {
 
             lastAnchorGeometrySnapshot = geometries
             logAnchorGeometryIssuesIfNeeded(geometries)
-            onAnchorGeometryChanged?(geometries)
-            onLayoutChanged?()
+            DispatchQueue.main.async {
+                self.onAnchorGeometryChanged?(geometries)
+                self.onLayoutChanged?()
+            }
         }
 
         private func geometrySnapshotIsMeaningfullyDifferent(

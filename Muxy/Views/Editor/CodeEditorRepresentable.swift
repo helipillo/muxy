@@ -1150,12 +1150,23 @@ struct CodeEditorView: NSViewRepresentable {
                 cachedMarkdownAnchors = MarkdownAnchorParser.parseAnchors(in: store.fullText())
             }
 
-            let focusLine = MarkdownEditorAnchorMapper.focusLine(
-                scrollY: scrollView.contentView.bounds.origin.y,
-                visibleHeight: scrollView.contentView.bounds.height,
-                estimatedLineHeight: viewport.estimatedLineHeight,
-                lineCount: store.lineCount
-            )
+            let scrollY = scrollView.contentView.bounds.origin.y
+            let visibleHeight = scrollView.contentView.bounds.height
+            let documentHeight = scrollView.documentView?.bounds.height ?? 0
+            let maxScrollY = max(0, documentHeight - visibleHeight)
+            let bottomThreshold = max(viewport.estimatedLineHeight * 2, 24)
+            let isNearBottom = maxScrollY > 0 && scrollY >= maxScrollY - bottomThreshold
+
+            let focusLine = if isNearBottom {
+                store.lineCount
+            } else {
+                MarkdownEditorAnchorMapper.focusLine(
+                    scrollY: scrollY,
+                    visibleHeight: visibleHeight,
+                    estimatedLineHeight: viewport.estimatedLineHeight,
+                    lineCount: store.lineCount
+                )
+            }
 
             let snapshot = MarkdownEditorAnchorMapper.snapshot(focusLine: focusLine, anchors: cachedMarkdownAnchors)
             if state.markdownActiveAnchorID != snapshot.activeAnchorID {

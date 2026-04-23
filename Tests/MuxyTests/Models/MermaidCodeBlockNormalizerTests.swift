@@ -88,4 +88,40 @@ struct MermaidCodeBlockNormalizerTests {
         #expect(html.contains("mermaid.min.js"))
         #expect(html.contains("mermaid.render("))
     }
+
+    @Test("MarkdownRenderer html injects anchor metadata contracts")
+    @MainActor
+    func markdownRendererInjectsAnchorMetadataContracts() {
+        let markdown = """
+        # Title
+
+        Paragraph
+
+        ![alt](image.png)
+
+        | A | B |
+        | - | - |
+        | 1 | 2 |
+
+        ```mermaid
+        graph TD
+        A --> B
+        ```
+        """
+
+        let html = MarkdownRenderer.html(
+            content: markdown,
+            filePath: nil,
+            bgColor: NSColor.black,
+            fgColor: NSColor.white,
+            accentColor: NSColor.systemBlue
+        )
+
+        #expect(html.contains("data-muxy-anchor-id"))
+        #expect(html.contains("data-muxy-line-start"))
+        #expect(html.contains("data-muxy-line-end"))
+        #expect(html.contains("parseSyncAnchors(content)"))
+        #expect(html.contains("muxy-anchor-block muxy-anchor-kind-"))
+        #expect(html.contains("data-muxy-mermaid=\"true\""))
+    }
 }

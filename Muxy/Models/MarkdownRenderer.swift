@@ -240,6 +240,10 @@ enum MarkdownRenderer {
                     margin: 0 auto;
                     color: var(--fg);
                 }
+                .muxy-anchor-block {
+                    display: block;
+                    position: relative;
+                }
                 .markdown-body h1, .markdown-body h2, .markdown-body h3,
                 .markdown-body h4, .markdown-body h5, .markdown-body h6 {
                     color: var(--fg);
@@ -600,7 +604,239 @@ enum MarkdownRenderer {
                     }
                 }
 
+                function detectAnchorKind(lines, index) {
+                    var line = lines[index] || '';
+                    var trimmed = line.trim();
+                    if (!trimmed) {
+                        return null;
+                    }
+                    if (/^ {0,3}(?:```+|~~~+)/.test(line)) {
+                        var info = line.replace(/^ {0,3}(?:```+|~~~+)\\s*/, '').trim().toLowerCase();
+                        return info === 'mermaid' ? 'mermaid' : 'fencedCode';
+                    }
+                    if (/^ {0,3}#{1,6}(?:\\s+|$)/.test(line)) {
+                        return 'heading';
+                    }
+                    if (/^ {0,3}(?:[-*_])(?:\\s*[-*_]){2,}\\s*$/.test(line)) {
+                        return 'thematicBreak';
+                    }
+                    if (/^ {0,3}>\\s?/.test(line)) {
+                        return 'blockquote';
+                    }
+                    if (/^ {0,3}(?:[*+-]|\\d+[.)])\\s+/.test(line)) {
+                        return 'list';
+                    }
+                    if (/^\\s*!\\[[^\\]]*\\]\\([^\\)]+\\)\\s*$/.test(line)) {
+                        return 'image';
+                    }
+                    if (/\\|/.test(line)) {
+                        var next = lines[index + 1] || '';
+                        if (/^\\s*\\|?(?:\\s*:?-{3,}:?\\s*\\|)+\\s*:?-{3,}:?\\s*\\|?\\s*$/.test(next)) {
+                            return 'table';
+                        }
+                    }
+                    if (/^ {0,3}<(?!!--)([A-Za-z][\\w-]*)(\\s|>|$)/.test(line)) {
+                        return 'htmlBlock';
+                    }
+                    return 'paragraph';
+                }
+
+                function consumeAnchor(lines, index, kind) {
+                    var i = index;
+                    if (kind === 'heading' || kind === 'thematicBreak' || kind === 'image' || kind === 'htmlBlock') {
+                        return index;
+                    }
+                    if (kind === 'fencedCode' || kind === 'mermaid') {
+                        var opener = lines[index] || '';
+                        var openerMatch = opener.match(/^ {0,3}(```+|~~~+)/);
+                        var fence = openerMatch ? openerMatch[1][0] : '`';
+                        var minCount = openerMatch ? openerMatch[1].length : 3;
+                        i = index + 1;
+                        while (i < lines.length) {
+                            var candidate = lines[i] || '';
+                            var closeMatch = candidate.match(/^ {0,3}(```+|~~~+)\\s*$/);
+                            if (closeMatch && closeMatch[1][0] === fence && closeMatch[1].length >= minCount) {
+                                return i;
+                            }
+                            i += 1;
+                        }
+                        return lines.length - 1;
+                    }
+                    if (kind === 'blockquote') {
+                        while (i + 1 < lines.length) {
+                            var nextLine = lines[i + 1] || '';
+                            if (!nextLine.trim()) {
+                                i += 1;
+                                continue;
+                            }
+                            if (!/^ {0,3}>\\s?/.test(nextLine)) {
+                                break;
+                            }
+                            i += 1;
+                        }
+                        return i;
+                    }
+                    if (kind === 'list') {
+                        while (i + 1 < lines.length) {
+                            var listNext = lines[i + 1] || '';
+                            if (!listNext.trim()) {
+                                i += 1;
+                                continue;
+                            }
+                            if (/^ {0,3}(?:[*+-]|\\d+[.)])\\s+/.test(listNext) || /^\\s{2,}\\S/.test(listNext)) {
+                                i += 1;
+                                continue;
+                            }
+                            break;
+                        }
+                        return i;
+                    }
+                    if (kind === 'table') {
+                        i = index + 1;
+                        while (i + 1 < lines.length) {
+                            var tableNext = lines[i + 1] || '';
+                            if (!tableNext.trim() || !/\\|/.test(tableNext)) {
+                                break;
+                            }
+                            i += 1;
+                        }
+                        return i;
+                    }
+                    while (i + 1 < lines.length) {
+                        var paragraphNext = lines[i + 1] || '';
+                        if (!paragraphNext.trim()) {
+                            break;
+                        }
+                        if (detectAnchorKind(lines, i + 1) !== 'paragraph') {
+                            break;
+                        }
+                        i += 1;
+                    }
+                    return i;
+                }
+
+                function parseSyncAnchors(content) {
+                    var lines = content.split(/\\r?\\n/);
+                    var anchors = [];
+                    var i = 0;
+                    var sequence = 0;
+                    while (i < lines.length) {
+                        if (!(lines[i] || '').trim()) {
+                            i += 1;
+                            continue;
+                        }
+                        var kind = detectAnchorKind(lines, i) || 'other';
+                        var end = consumeAnchor(lines, i, kind);
+                        var startLine = i + 1;
+                        var endLine = end + 1;
+                        anchors.push({
+                            id: 'muxy-anchor-' + String(sequence),
+                            kind: kind,
+                            startLine: startLine,
+                            endLine: Math.max(startLine, endLine)
+                        });
+                        sequence += 1;
+                        i = end + 1;
+                    }
+                    return anchors;
+                }
+
+                function inferElementKind(element) {
+                    if (!element) {
+                        return 'other';
+                    }
+                    var tag = (element.tagName || '').toLowerCase();
+                    if (/^h[1-6]$/.test(tag)) {
+                        return 'heading';
+                    }
+                    if (tag === 'ul' || tag === 'ol') {
+                        return 'list';
+                    }
+                    if (tag === 'blockquote') {
+                        return 'blockquote';
+                    }
+                    if (tag === 'pre') {
+                        return 'fencedCode';
+                    }
+                    if (tag === 'table') {
+                        return 'table';
+                    }
+                    if (tag === 'hr') {
+                        return 'thematicBreak';
+                    }
+                    if (tag === 'img') {
+                        return 'image';
+                    }
+                    if (tag === 'div' && element.classList.contains('mermaid')) {
+                        return 'mermaid';
+                    }
+                    if (tag === 'p') {
+                        var meaningfulNodes = Array.prototype.slice.call(element.childNodes).filter(function(node) {
+                            if (node.nodeType === Node.TEXT_NODE) {
+                                return Boolean((node.textContent || '').trim());
+                            }
+                            return true;
+                        });
+                        if (meaningfulNodes.length === 1
+                            && meaningfulNodes[0].nodeType === Node.ELEMENT_NODE
+                            && meaningfulNodes[0].tagName
+                            && meaningfulNodes[0].tagName.toLowerCase() === 'img') {
+                            return 'image';
+                        }
+                        return 'paragraph';
+                    }
+                    return 'other';
+                }
+
+                function collectAnchorElements(root) {
+                    return Array.prototype.slice.call(root.children).filter(function(element) {
+                        if (!element || !element.tagName) {
+                            return false;
+                        }
+                        var tag = element.tagName.toLowerCase();
+                        if (/^h[1-6]$/.test(tag)) {
+                            return true;
+                        }
+                        return ['p', 'ul', 'ol', 'blockquote', 'pre', 'table', 'hr', 'img', 'div'].includes(tag);
+                    });
+                }
+
+                function assignAnchorMetadata(markdownRoot, anchors) {
+                    if (!markdownRoot || !anchors || !anchors.length) {
+                        return;
+                    }
+                    var elements = collectAnchorElements(markdownRoot);
+                    var anchorIndex = 0;
+                    for (var i = 0; i < elements.length && anchorIndex < anchors.length; i++) {
+                        var element = elements[i];
+                        var elementKind = inferElementKind(element);
+                        var selectedIndex = anchorIndex;
+                        for (var lookahead = anchorIndex; lookahead < Math.min(anchorIndex + 6, anchors.length); lookahead++) {
+                            if (anchors[lookahead].kind === elementKind) {
+                                selectedIndex = lookahead;
+                                break;
+                            }
+                        }
+                        var anchor = anchors[selectedIndex];
+                        anchorIndex = selectedIndex + 1;
+                        var target = element;
+                        if (['mermaid', 'image', 'fencedCode', 'table'].includes(elementKind)) {
+                            var wrapper = document.createElement('div');
+                            wrapper.className = 'muxy-anchor-block muxy-anchor-kind-' + elementKind;
+                            if (element.parentNode) {
+                                element.parentNode.insertBefore(wrapper, element);
+                                wrapper.appendChild(element);
+                                target = wrapper;
+                            }
+                        }
+                        target.setAttribute('data-muxy-anchor-id', anchor.id);
+                        target.setAttribute('data-muxy-line-start', String(anchor.startLine));
+                        target.setAttribute('data-muxy-line-end', String(anchor.endLine));
+                    }
+                }
+
                 async function renderMarkdown(content) {
+                    var anchors = parseSyncAnchors(content);
                     marked.setOptions({
                         highlight: function(code, lang) {
                             if (lang && hljs.getLanguage(lang)) {
@@ -619,11 +855,12 @@ enum MarkdownRenderer {
                     content = content.replace(/```mermaid\\s*\\r?\\n([\\s\\S]*?)```/g, function(match, code) {
                         var id = 'mermaid-' + Object.keys(diagramMap).length;
                         diagramMap[id] = code.trim();
-                        return '<div class=\"mermaid\" id=\"' + id + '\"></div>';
+                        return '<div class=\"mermaid\" id=\"' + id + '\" data-muxy-mermaid=\"true\"></div>';
                     });
 
                     var html = marked.parse(content);
                     document.getElementById('markdown').innerHTML = html;
+                    assignAnchorMetadata(document.getElementById('markdown'), anchors);
                     initializeMermaidControls();
 
                     // Apply syntax highlighting to non-mermaid code blocks

@@ -494,35 +494,10 @@ struct MarkdownWebView: NSViewRepresentable {
             to webView: WKWebView
         ) {
             guard progress >= 0 else { return }
+            _ = editorScrollY
+            _ = editorMaxScrollY
 
             let clampedProgress = min(max(progress, 0), 1)
-            if linkedScrollEnabled, editorMaxScrollY > 0 {
-                isApplyingProgrammaticScroll = true
-                programmaticScrollSuppressionUntil = Date().addingTimeInterval(Self.programmaticScrollSuppressionWindow)
-                let script = MarkdownWebBridge.scrollToLinkedEditorPositionScript(
-                    editorScrollY: editorScrollY,
-                    editorMaxScrollY: editorMaxScrollY,
-                    progress: clampedProgress
-                )
-                webView.evaluateJavaScript(script) { _, error in
-                    if let error {
-                        self.isApplyingProgrammaticScroll = false
-                        self.programmaticScrollSuppressionUntil = nil
-                        markdownWebLogger.error(
-                            """
-                            Failed applying linked markdown pixel scroll
-                            reason=\(error.localizedDescription, privacy: .public)
-                            """
-                        )
-                        self.applyScrollProgress(clampedProgress, to: webView)
-                        return
-                    }
-
-                    self.lastScrollProgress = clampedProgress
-                }
-                return
-            }
-
             applyScrollProgress(clampedProgress, to: webView)
         }
 

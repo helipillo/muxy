@@ -233,7 +233,6 @@ enum MarkdownRenderer {
                     display: none;
                 }
                 html.muxy-linked-scroll #content {
-                    overflow-y: hidden;
                     overscroll-behavior: none;
                 }
                 .markdown-body {

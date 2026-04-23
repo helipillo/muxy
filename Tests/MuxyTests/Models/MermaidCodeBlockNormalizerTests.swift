@@ -87,5 +87,7 @@ struct MermaidCodeBlockNormalizerTests {
         #expect(html.contains("themeVariables:"))
         #expect(html.contains("mermaid.min.js"))
         #expect(html.contains("mermaid.render("))
+        #expect(html.contains("escapeHTML("))
+        #expect(html.contains("renderer.html"))
     }
 }

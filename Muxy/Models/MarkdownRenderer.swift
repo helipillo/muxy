@@ -2,6 +2,8 @@ import AppKit
 import Foundation
 import os
 
+private let markdownLogger = Logger(subsystem: "app.muxy", category: "MarkdownPreview")
+
 private struct MermaidThemeVariables: Codable {
     let primaryColor: String
     let primaryTextColor: String
@@ -599,8 +601,29 @@ enum MarkdownRenderer {
                     }
                 }
 
+                function escapeHTML(value) {
+                    return String(value || '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                }
+
                 async function renderMarkdown(content) {
+                    var renderer = new marked.Renderer();
+                    renderer.html = function(token) {
+                        var raw = '';
+                        if (typeof token === 'string') {
+                            raw = token;
+                        } else if (token && typeof token.text === 'string') {
+                            raw = token.text;
+                        }
+                        return escapeHTML(raw);
+                    };
+
                     marked.setOptions({
+                        renderer: renderer,
                         highlight: function(code, lang) {
                             if (lang && hljs.getLanguage(lang)) {
                                 try {

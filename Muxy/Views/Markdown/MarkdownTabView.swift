@@ -110,166 +110,6 @@ private enum MarkdownWebBridge {
     }
 }
 
-struct MarkdownTabView: View {
-    @Bindable var state: MarkdownTabState
-    let onFocus: () -> Void
-
-    @State private var showFilePicker = false
-
-    private static let markdownContentTypes: [UTType] = {
-        let extensions = ["md", "markdown", "mdown", "mkd"]
-        let types = extensions.compactMap { UTType(filenameExtension: $0) }
-        return types.isEmpty ? [.plainText] : types
-    }()
-
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-            Rectangle().fill(MuxyTheme.border).frame(height: 1)
-            content
-        }
-        .background(MuxyTheme.bg)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onFocus)
-        .fileImporter(
-            isPresented: $showFilePicker,
-            allowedContentTypes: Self.markdownContentTypes,
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case let .success(urls):
-                guard let url = urls.first else { return }
-                openFile(from: url)
-            case let .failure(error):
-                markdownWebLogger.error(
-                    "Markdown file picker failed reason=\(error.localizedDescription, privacy: .public)"
-                )
-            }
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            IconButton(symbol: "folder", accessibilityLabel: "Open File") {
-                showFilePicker = true
-            }
-            .help("Open Markdown File")
-
-            if state.filePath != nil {
-                IconButton(symbol: "arrow.clockwise", accessibilityLabel: "Reload") {
-                    state.reload()
-                }
-                .help("Reload File")
-
-                PathBreadcrumb(path: state.projectRelativePath ?? state.fileName)
-            }
-
-            Spacer(minLength: 0)
-
-            if state.filePath != nil {
-                HStack(spacing: 4) {
-                    Text(state.fileName)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(MuxyTheme.fgMuted)
-                        .lineLimit(1)
-                }
-            }
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 32)
-        .background(MuxyTheme.bg)
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if state.isLoading {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let error = state.errorMessage, state.rawContent == nil {
-            VStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 24))
-                    .foregroundStyle(MuxyTheme.fgMuted)
-                Text(error)
-                    .font(.system(size: 12))
-                    .foregroundStyle(MuxyTheme.fgMuted)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 300)
-                Button("Choose Another File") {
-                    showFilePicker = true
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(MuxyTheme.accent)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if state.rawContent == nil {
-            emptyState
-        } else {
-            MarkdownWebView(
-                html: state.renderedHTML,
-                filePath: state.filePath,
-                scrollPosition: $state.scrollPosition
-            )
-        }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "doc.richtext")
-                .font(.system(size: 40))
-                .foregroundStyle(MuxyTheme.fgMuted)
-
-            VStack(spacing: 6) {
-                Text("Markdown Reader")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(MuxyTheme.fg)
-                Text("Open a markdown file to preview it here with full formatting and diagram support.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(MuxyTheme.fgMuted)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 300)
-            }
-
-            VStack(spacing: 8) {
-                Button {
-                    showFilePicker = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("Open File")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .foregroundStyle(MuxyTheme.bg)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(MuxyTheme.accent, in: RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-
-                Text("Or use ⌘P and search for .md files")
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func openFile(from url: URL) {
-        markdownWebLogger.info(
-            "Markdown open requested path=\(url.path, privacy: .public) extension=\(url.pathExtension.lowercased(), privacy: .public)"
-        )
-        guard url.startAccessingSecurityScopedResource() else {
-            markdownWebLogger.error(
-                "Markdown open denied security scope path=\(url.path, privacy: .public)"
-            )
-            state.errorMessage = "Unable to access selected file."
-            return
-        }
-        defer { url.stopAccessingSecurityScopedResource() }
-        state.loadFile(url.path)
-    }
-}
-
 struct MarkdownWebView: NSViewRepresentable {
     struct Configuration {
         let scrollSyncEnabled: Bool
@@ -490,6 +330,28 @@ struct MarkdownWebView: NSViewRepresentable {
                     to: webView
                 )
             }
+        }
+
+        @MainActor
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+        ) {
+            guard navigationAction.navigationType == .linkActivated,
+                  let url = navigationAction.request.url
+            else {
+                decisionHandler(.allow)
+                return
+            }
+
+            if let scheme = url.scheme?.lowercased(), ["http", "https", "mailto"].contains(scheme) {
+                NSWorkspace.shared.open(url)
+                decisionHandler(.cancel)
+                return
+            }
+
+            decisionHandler(.cancel)
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {

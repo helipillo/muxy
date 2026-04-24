@@ -90,6 +90,8 @@ final class EditorTabState: Identifiable {
     @ObservationIgnored let markdownSyncCoordinator = MarkdownSyncCoordinator()
     @ObservationIgnored private var markdownSyncAnchorsCache: [MarkdownSyncAnchor] = []
     @ObservationIgnored private var markdownSyncAnchorsCacheVersion: Int = -1
+    @ObservationIgnored private(set) var syntaxHighlighter: SyntaxHighlighter?
+
 
     static let largeFileWarningThreshold: Int64 = 5 * 1024 * 1024
     static let largeFileRefuseThreshold: Int64 = 50 * 1024 * 1024
@@ -142,12 +144,14 @@ final class EditorTabState: Identifiable {
         if isMarkdownFile {
             markdownViewMode = .preview
         }
+        syntaxHighlighter = Self.makeSyntaxHighlighter(for: filePath)
         loadFile()
     }
 
     func updateFilePath(_ newPath: String) {
         guard filePath != newPath else { return }
         filePath = newPath
+        syntaxHighlighter = Self.makeSyntaxHighlighter(for: newPath)
         refreshReadOnlyStatus()
     }
 
@@ -198,6 +202,11 @@ final class EditorTabState: Identifiable {
         }
     }
 
+    private static func makeSyntaxHighlighter(for filePath: String) -> SyntaxHighlighter? {
+        guard let grammar = SyntaxLanguageRegistry.grammar(forFile: filePath) else { return nil }
+        return SyntaxHighlighter(grammar: grammar)
+    }
+
     deinit {
         loadTask?.cancel()
     }
@@ -245,6 +254,7 @@ final class EditorTabState: Identifiable {
         isModified = false
         errorMessage = nil
         backingStore = nil
+        syntaxHighlighter?.reset()
         loadTask?.cancel()
         let path = filePath
         loadTask = Task { [weak self] in

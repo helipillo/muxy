@@ -849,9 +849,6 @@ private struct MainWindowShortcutInterceptor: NSViewRepresentable {
 }
 
 private final class ShortcutInterceptingView: NSView {
-    private static let undoSelector = Selector(("undo:"))
-    private static let redoSelector = Selector(("redo:"))
-
     var onShortcut: ((ShortcutAction) -> Bool)?
     var onMouseBack: (() -> Void)?
     var onMouseForward: (() -> Void)?
@@ -871,10 +868,6 @@ private final class ShortcutInterceptingView: NSView {
               ShortcutContext.isMainWindow(window)
         else { return super.performKeyEquivalent(with: event) }
 
-        if handleUndoRedoShortcut(event) {
-            return true
-        }
-
         let scopes = ShortcutContext.activeScopes(for: window)
         guard let action = KeyBindingStore.shared.action(for: event, scopes: scopes) else {
             return super.performKeyEquivalent(with: event)
@@ -885,24 +878,6 @@ private final class ShortcutInterceptingView: NSView {
         }
 
         return super.performKeyEquivalent(with: event)
-    }
-
-    private func handleUndoRedoShortcut(_ event: NSEvent) -> Bool {
-        let flags = event.modifierFlags.intersection(KeyCombo.supportedModifierMask)
-        let normalizedKey = KeyCombo.normalized(
-            key: event.charactersIgnoringModifiers ?? "",
-            keyCode: event.keyCode
-        )
-
-        if normalizedKey == "z", flags == .command {
-            return NSApp.sendAction(Self.undoSelector, to: nil, from: nil)
-        }
-
-        if normalizedKey == "z", flags == [.command, .shift] {
-            return NSApp.sendAction(Self.redoSelector, to: nil, from: nil)
-        }
-
-        return false
     }
 
     private func installMouseMonitorIfNeeded() {

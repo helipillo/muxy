@@ -192,10 +192,12 @@ final class EditorTabState: Identifiable {
 
     func applyMarkdownSyncOutput(_ output: MarkdownSyncCoordinator.Output) {
         if let point = output.requestPreviewScroll {
+            markdownScrollDriver = .editor
             markdownPreviewScrollRequest = point
             markdownPreviewScrollRequestVersion += 1
         }
         if let line = output.requestEditorScrollLine {
+            markdownScrollDriver = .preview
             markdownEditorScrollRequestLine = line
             markdownEditorScrollRequestVersion += 1
         }

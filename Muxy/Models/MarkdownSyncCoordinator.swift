@@ -84,24 +84,20 @@ final class MarkdownSyncCoordinator {
         driver = .preview
         driverSince = timestamp
 
-        let lineIndex = max(0, min(totalLineCount - 1, point.representativeLine - 1))
+        let lineIndex: Int
+        let remainingLines = max(0, totalLineCount - point.endLine)
+        if point.localProgress >= 0.985, remainingLines <= 6 {
+            lineIndex = max(0, totalLineCount - 1)
+        } else {
+            lineIndex = max(0, min(totalLineCount - 1, point.representativeLine - 1))
+        }
         lastIssuedEditorLine = lineIndex
         lastIssuedEditorTime = timestamp
         return Output(requestEditorScrollLine: lineIndex)
     }
 
     func previewDidRelayout() -> Output {
-        guard driver == .editor, let point = lastIssuedPreviewPoint else {
-            return Output()
-        }
-
-        let timestamp = now()
-        guard timestamp - lastIssuedPreviewTime >= 0.05 else {
-            return Output()
-        }
-
-        lastIssuedPreviewTime = timestamp
-        return Output(requestPreviewScroll: point)
+        Output()
     }
 
     private func shouldAcceptUpdate(

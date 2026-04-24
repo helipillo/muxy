@@ -10,17 +10,6 @@ private final class CodeEditorTextView: NSTextView {
     var onRedoRequest: (() -> Bool)?
     var canUndoRequest: (() -> Bool)?
     var canRedoRequest: (() -> Bool)?
-    var onFocus: (() -> Void)?
-
-    override func becomeFirstResponder() -> Bool {
-        let result = super.becomeFirstResponder()
-        if result {
-            DispatchQueue.main.async { [weak self] in
-                self?.onFocus?()
-            }
-        }
-        return result
-    }
 
     override func paste(_ sender: Any?) {
         pasteAsPlainText(sender)
@@ -269,7 +258,6 @@ struct CodeEditorView: NSViewRepresentable {
         textView.canRedoRequest = { [weak coordinator] in
             coordinator?.canPerformRedoRequest() ?? false
         }
-        textView.onFocus = onFocus
         coordinator.setScrollObserver(for: scrollView)
         textView.undoManager?.removeAllActions()
 
@@ -288,10 +276,23 @@ struct CodeEditorView: NSViewRepresentable {
                 codeTextView.onRedoRequest = nil
                 codeTextView.canUndoRequest = nil
                 codeTextView.canRedoRequest = nil
-                codeTextView.onFocus = nil
             }
         }
         coordinator.textView?.delegate = nil
+    }
+
+    private static func claimFirstResponder(textView: NSTextView, attemptsRemaining: Int) {
+        guard attemptsRemaining > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak textView] in
+            guard let textView else { return }
+            guard let window = textView.window else {
+                claimFirstResponder(textView: textView, attemptsRemaining: attemptsRemaining - 1)
+                return
+            }
+            window.makeFirstResponder(textView)
+            textView.setSelectedRange(NSRange(location: 0, length: 0))
+            textView.scrollRangeToVisible(NSRange(location: 0, length: 0))
+        }
     }
 
     // MARK: - updateNSView
@@ -299,9 +300,6 @@ struct CodeEditorView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = context.coordinator.textView else { return }
         let coordinator = context.coordinator
-        if let codeTextView = textView as? CodeEditorTextView {
-            codeTextView.onFocus = onFocus
-        }
 
         if scrollView.hasVerticalScroller != showsVerticalScroller {
             scrollView.hasVerticalScroller = showsVerticalScroller
@@ -310,10 +308,6 @@ struct CodeEditorView: NSViewRepresentable {
 
         if state.backingStore != nil, coordinator.viewportState == nil {
             coordinator.enterViewportMode(scrollView: scrollView)
-        }
-
-        if focused {
-            coordinator.ensureEditorIsFirstResponder()
         }
 
         updateNSViewViewportMode(scrollView: scrollView, textView: textView, coordinator: coordinator)
@@ -342,6 +336,9 @@ struct CodeEditorView: NSViewRepresentable {
         if !coordinator.hasAppliedInitialContent, viewport.backingStore.lineCount > 1 || backingStoreChanged {
             coordinator.hasAppliedInitialContent = true
             coordinator.refreshViewport(force: true)
+            if focused {
+                Self.claimFirstResponder(textView: textView, attemptsRemaining: 20)
+            }
         }
 
         let themeChanged = coordinator.lastThemeVersion != themeVersion
@@ -374,7 +371,6 @@ struct CodeEditorView: NSViewRepresentable {
         coordinator.syncMarkdownScrollPositionIfNeeded()
         coordinator.updateMarkdownEditorScrollMetrics()
         coordinator.updateMarkdownEditorAnchorSnapshot()
-        coordinator.updateMarkdownPreviewSyncPointFromEditorScroll()
 
         if coordinator.lastEditorFocusVersion != editorFocusVersion {
             coordinator.lastEditorFocusVersion = editorFocusVersion
@@ -932,16 +928,6 @@ struct CodeEditorView: NSViewRepresentable {
             }
         }
 
-        func ensureEditorIsFirstResponder() {
-            guard let textView, let window = textView.window else { return }
-            guard window.firstResponder !== textView else { return }
-            DispatchQueue.main.async { [weak textView] in
-                guard let textView, let window = textView.window else { return }
-                guard window.firstResponder !== textView else { return }
-                window.makeFirstResponder(textView)
-            }
-        }
-
         // MARK: - Search Highlighting
 
         func clearSearchHighlights() {
@@ -1106,6 +1092,7 @@ struct CodeEditorView: NSViewRepresentable {
             let newLine = nsLine.replacingCharacters(in: match.range, with: replacement)
             _ = store.replaceLines(in: match.lineIndex ..< match.lineIndex + 1, with: [newLine])
             state.backingStoreVersion += 1
+            lastSyncedBackingStoreVersion = state.backingStoreVersion
             state.markModified()
             invalidateSyntaxHighlightsFromLine(match.lineIndex)
             invalidateRenderedViewportText()
@@ -1136,6 +1123,7 @@ struct CodeEditorView: NSViewRepresentable {
                 invalidateSyntaxHighlightsFromLine(earliestInvalidation)
             }
             state.backingStoreVersion += 1
+            lastSyncedBackingStoreVersion = state.backingStoreVersion
             state.markModified()
             invalidateRenderedViewportText()
             scheduleMarkdownPreviewRefresh(immediate: true)
@@ -1304,6 +1292,7 @@ struct CodeEditorView: NSViewRepresentable {
             if isApplyingMarkdownScroll {
                 isApplyingMarkdownScroll = false
             } else {
+                state.markdownScrollDriver = .editor
                 updateMarkdownPreviewSyncPointFromEditorScroll()
             }
             if !isEditingViewport {
@@ -1350,7 +1339,7 @@ struct CodeEditorView: NSViewRepresentable {
             let visibleHeight = scrollView.contentView.bounds.height
             let documentHeight = scrollView.documentView?.bounds.height ?? 0
             let maxScrollY = max(0, documentHeight - visibleHeight)
-            let bottomThreshold = max(6, min(viewport.estimatedLineHeight * 0.3, 12))
+            let bottomThreshold = max(2, min(viewport.estimatedLineHeight * 0.12, 4))
             let isNearBottom = maxScrollY > 0 && scrollY >= maxScrollY - bottomThreshold
 
             let focusLine = if isNearBottom {
@@ -1399,6 +1388,8 @@ struct CodeEditorView: NSViewRepresentable {
         }
 
         func updateMarkdownPreviewSyncPointFromEditorScroll() {
+            guard !isApplyingMarkdownScroll else { return }
+            guard state.markdownScrollDriver != .preview else { return }
             guard state.isMarkdownFile,
                   state.markdownViewMode == .split,
                   state.markdownScrollSyncEnabled,
@@ -1518,6 +1509,7 @@ struct CodeEditorView: NSViewRepresentable {
             }
 
             state.backingStoreVersion += 1
+            lastSyncedBackingStoreVersion = state.backingStoreVersion
             state.markModified()
 
             isEditingViewport = true
@@ -1526,16 +1518,7 @@ struct CodeEditorView: NSViewRepresentable {
             lastRenderedViewportRange = viewport.viewportStartLine ..< viewport.viewportEndLine
             lastRenderedBackingStoreVersion = state.backingStoreVersion
             needsViewportTextReload = false
-            if let pendingEdit {
-                updateLineStartOffsetsAfterEdit(
-                    viewportStartLine: viewportStartLine,
-                    globalStartLine: pendingEdit.startLine,
-                    oldLineCount: pendingEdit.oldLines.count,
-                    newLines: pendingEdit.newLines
-                )
-            } else {
-                rebuildLineStartOffsetsForViewport()
-            }
+            rebuildLineStartOffsetsForViewport()
 
             if let pendingEdit,
                !isApplyingViewportHistory,
@@ -1668,6 +1651,7 @@ struct CodeEditorView: NSViewRepresentable {
                 invalidateSyntaxHighlightsFromLine(earliestInvalidation)
             }
             state.backingStoreVersion += 1
+            lastSyncedBackingStoreVersion = state.backingStoreVersion
             state.markModified()
             invalidateRenderedViewportText()
             scheduleMarkdownPreviewRefresh(immediate: true)
@@ -1701,6 +1685,7 @@ struct CodeEditorView: NSViewRepresentable {
                 invalidateSyntaxHighlightsFromLine(earliestInvalidation)
             }
             state.backingStoreVersion += 1
+            lastSyncedBackingStoreVersion = state.backingStoreVersion
             state.markModified()
             invalidateRenderedViewportText()
             scheduleMarkdownPreviewRefresh(immediate: true)
@@ -1951,7 +1936,11 @@ struct CodeEditorView: NSViewRepresentable {
             }
 
             let maxScrollY = max(0, viewport.totalDocumentHeight - visibleHeight)
-            newScrollY = min(maxScrollY, max(0, newScrollY))
+            if globalLine >= viewport.backingStore.lineCount - 1 {
+                newScrollY = maxScrollY
+            } else {
+                newScrollY = min(maxScrollY, max(0, newScrollY))
+            }
 
             scrollView.contentView.setBoundsOrigin(NSPoint(x: scrollView.contentView.bounds.origin.x, y: newScrollY))
             scrollView.reflectScrolledClipView(scrollView.contentView)

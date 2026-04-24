@@ -137,8 +137,8 @@ struct EditorPane: View {
                     syncScrollRequest: $state.markdownPreviewScrollRequest,
                     syncScrollRequestVersion: state.markdownPreviewScrollRequestVersion,
                     scrollSyncEnabled: usesMarkdownAnchorSync,
-                    showsVerticalScroller: true,
-                    hidesContentScrollbar: false,
+                    showsVerticalScroller: state.markdownViewMode != .split,
+                    hidesContentScrollbar: state.markdownViewMode == .split,
                     onSyncPointChanged: { point in
                         let lineCount = state.backingStore?.lineCount ?? 0
                         let output = state.markdownSyncCoordinator.previewDidScroll(point: point, totalLineCount: lineCount)

@@ -228,6 +228,8 @@ enum MarkdownRenderer {
                 html.muxy-hide-content-scrollbar #content {
                     scrollbar-width: none;
                     -ms-overflow-style: none;
+                    overflow-y: hidden;
+                    overscroll-behavior: none;
                 }
                 html.muxy-hide-content-scrollbar #content::-webkit-scrollbar {
                     width: 0;

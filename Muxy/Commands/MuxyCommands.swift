@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 struct MuxyCommands: Commands {
-    private static let undoSelector = #selector(NSResponder.undo(_:))
-    private static let redoSelector = #selector(NSResponder.redo(_:))
+    private static let undoSelector = Selector(("undo:"))
+    private static let redoSelector = Selector(("redo:"))
 
     let appState: AppState
     let projectStore: ProjectStore

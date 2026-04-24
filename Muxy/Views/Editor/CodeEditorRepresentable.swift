@@ -295,6 +295,10 @@ struct CodeEditorView: NSViewRepresentable {
             coordinator.enterViewportMode(scrollView: scrollView)
         }
 
+        if focused {
+            coordinator.ensureEditorIsFirstResponder()
+        }
+
         updateNSViewViewportMode(scrollView: scrollView, textView: textView, coordinator: coordinator)
     }
 
@@ -748,6 +752,16 @@ struct CodeEditorView: NSViewRepresentable {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak textView] in
                 guard let textView, let window = textView.window else { return }
+                window.makeFirstResponder(textView)
+            }
+        }
+
+        func ensureEditorIsFirstResponder() {
+            guard let textView, let window = textView.window else { return }
+            guard window.firstResponder !== textView else { return }
+            DispatchQueue.main.async { [weak textView] in
+                guard let textView, let window = textView.window else { return }
+                guard window.firstResponder !== textView else { return }
                 window.makeFirstResponder(textView)
             }
         }

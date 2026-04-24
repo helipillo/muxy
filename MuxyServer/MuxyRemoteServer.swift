@@ -47,7 +47,7 @@ public protocol MuxyRemoteServerDelegate: AnyObject {
     func registerDevice(clientID: UUID, name: String)
     func authenticateDevice(deviceID: UUID, token: String, name: String) -> DeviceAuthDecision
     func requestPairing(deviceID: UUID, token: String, name: String) async -> DeviceAuthDecision
-    func getDeviceTheme() -> (fg: UInt32, bg: UInt32)?
+    func getDeviceTheme() -> DeviceThemeEventDTO?
     func clientDisconnected(clientID: UUID)
     func getPaneOwner(paneID: UUID) -> PaneOwnerDTO?
     func getVCSStatus(projectID: UUID) async -> VCSStatusDTO?
@@ -246,6 +246,10 @@ public final class MuxyRemoteServer: @unchecked Sendable {
     }
 
     func handleRequest(_ request: MuxyRequest, from clientID: UUID) {
+        if Self.voidMethods.contains(request.method) {
+            Task { @MainActor in _ = await processRequest(request, clientID: clientID) }
+            return
+        }
         Task { @MainActor in
             let response = await processRequest(request, clientID: clientID)
             guard let data = try? MuxyCodec.encode(.response(response)) else { return }
@@ -254,6 +258,8 @@ public final class MuxyRemoteServer: @unchecked Sendable {
             }
         }
     }
+
+    private static let voidMethods: Set<MuxyMethod> = [.terminalInput]
 
     @MainActor
     func processRequest(_ request: MuxyRequest, clientID: UUID) async -> MuxyResponse {
@@ -621,7 +627,8 @@ public final class MuxyRemoteServer: @unchecked Sendable {
                 clientID: clientID,
                 deviceName: params.deviceName,
                 themeFg: theme?.fg,
-                themeBg: theme?.bg
+                themeBg: theme?.bg,
+                themePalette: theme?.palette
             )
             return MuxyResponse(id: request.id, result: .deviceInfo(info))
 
@@ -662,7 +669,8 @@ public final class MuxyRemoteServer: @unchecked Sendable {
                 clientID: clientID,
                 deviceName: deviceName,
                 themeFg: theme?.fg,
-                themeBg: theme?.bg
+                themeBg: theme?.bg,
+                themePalette: theme?.palette
             )
             return MuxyResponse(id: requestID, result: .pairing(result))
         case .unknown:

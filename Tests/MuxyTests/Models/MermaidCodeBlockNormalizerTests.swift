@@ -76,7 +76,6 @@ struct MermaidCodeBlockNormalizerTests {
         """
 
         let html = MarkdownRenderer.html(
-            content: markdown,
             anchors: [],
             filePath: nil,
             palette: MarkdownRenderer.Palette(
@@ -113,7 +112,6 @@ struct MermaidCodeBlockNormalizerTests {
         """
 
         let html = MarkdownRenderer.html(
-            content: markdown,
             anchors: [],
             filePath: nil,
             palette: MarkdownRenderer.Palette(
@@ -141,7 +139,6 @@ struct MermaidCodeBlockNormalizerTests {
         """#
 
         let html = MarkdownRenderer.html(
-            content: markdown,
             anchors: [],
             filePath: "/tmp/readme.md",
             palette: MarkdownRenderer.Palette(

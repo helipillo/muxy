@@ -91,7 +91,6 @@ enum MarkdownRenderer {
 
     @MainActor
     static func html(
-        content: String,
         anchors: [MarkdownSyncAnchor],
         filePath: String?,
         palette: Palette
@@ -178,8 +177,6 @@ enum MarkdownRenderer {
             pie12: "#\(mermaidTertiaryHex)"
         )
         let mermaidThemeVariablesJSON = mermaidThemeVariables.jsObjectLiteral
-        let preparedMermaidContent = MermaidCodeBlockNormalizer.normalizeMermaidCodeBlocks(in: content)
-        let encodedPayload = Data(preparedMermaidContent.utf8).base64EncodedString()
 
         let title = escapeForHTML(filePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Markdown")
         return """
@@ -981,6 +978,64 @@ enum MarkdownRenderer {
                     }
                 }
 
+                function imageCacheKey(image) {
+                    if (!image) {
+                        return '';
+                    }
+                    var src = image.getAttribute('src') || image.currentSrc || '';
+                    var alt = image.getAttribute('alt') || '';
+                    return src + '||' + alt;
+                }
+
+                function syncImageAttributes(sourceImage, targetImage) {
+                    if (!sourceImage || !targetImage) {
+                        return;
+                    }
+
+                    Array.from(targetImage.attributes).forEach(function(attribute) {
+                        if (!sourceImage.hasAttribute(attribute.name)) {
+                            targetImage.removeAttribute(attribute.name);
+                        }
+                    });
+
+                    Array.from(sourceImage.attributes).forEach(function(attribute) {
+                        if (attribute.name === 'src' && targetImage.getAttribute('src') === attribute.value) {
+                            return;
+                        }
+                        targetImage.setAttribute(attribute.name, attribute.value);
+                    });
+                }
+
+                function preserveExistingImages(markdownRoot, nextRoot) {
+                    if (!markdownRoot || !nextRoot) {
+                        return;
+                    }
+
+                    var imagePool = new Map();
+                    markdownRoot.querySelectorAll('img[src]').forEach(function(image) {
+                        var key = imageCacheKey(image);
+                        if (!key) {
+                            return;
+                        }
+                        if (!imagePool.has(key)) {
+                            imagePool.set(key, []);
+                        }
+                        imagePool.get(key).push(image);
+                    });
+
+                    nextRoot.querySelectorAll('img[src]').forEach(function(image) {
+                        var key = imageCacheKey(image);
+                        var candidates = key ? imagePool.get(key) : null;
+                        if (!candidates || !candidates.length) {
+                            return;
+                        }
+
+                        var existingImage = candidates.shift();
+                        syncImageAttributes(image, existingImage);
+                        image.replaceWith(existingImage);
+                    });
+                }
+
                 async function renderMarkdown(content) {
                     var anchors = parseSyncAnchors(content);
                     if (!_markedConfigured) {
@@ -1033,10 +1088,20 @@ enum MarkdownRenderer {
                     });
 
                     var html = marked.parse(content);
-                    document.getElementById('markdown').innerHTML = html;
-                    sanitizeMarkdownDOM(document.getElementById('markdown'));
-                    normalizeLocalImageSources(document.getElementById('markdown'));
-                    assignAnchorMetadata(document.getElementById('markdown'), anchors);
+                    var markdownRoot = document.getElementById('markdown');
+                    var nextRoot = document.createElement('div');
+                    nextRoot.innerHTML = html;
+                    sanitizeMarkdownDOM(nextRoot);
+                    normalizeLocalImageSources(nextRoot);
+                    preserveExistingImages(markdownRoot, nextRoot);
+
+                    var fragment = document.createDocumentFragment();
+                    while (nextRoot.firstChild) {
+                        fragment.appendChild(nextRoot.firstChild);
+                    }
+                    markdownRoot.replaceChildren(fragment);
+
+                    assignAnchorMetadata(markdownRoot, anchors);
                     initializeMermaidControls();
 
                     // Apply syntax highlighting to non-mermaid code blocks
@@ -1087,18 +1152,34 @@ enum MarkdownRenderer {
                         }
                     }
                 }
-                var markdownPayload = decodeBase64UTF8("\(encodedPayload)");
-                renderMarkdown(markdownPayload).catch(function(err) {
-                    window.__muxyErrors.push({
-                        type: 'render-error',
-                        message: String((err && err.message) ? err.message : err),
-                        source: 'renderMarkdown'
+                window.__muxyRenderMarkdown = function(base64Payload) {
+                    var markdownPayload = decodeBase64UTF8(String(base64Payload || ''));
+                    renderMarkdown(markdownPayload).catch(function(err) {
+                        window.__muxyErrors.push({
+                            type: 'render-error',
+                            message: String((err && err.message) ? err.message : err),
+                            source: 'renderMarkdown'
+                        });
+                        console.error('renderMarkdown failed:', err);
                     });
-                    console.error('renderMarkdown failed:', err);
-                });
+                    return true;
+                };
             </script>
         </body>
         </html>
+        """
+    }
+
+    static func updateScript(content: String) -> String {
+        let preparedMermaidContent = MermaidCodeBlockNormalizer.normalizeMermaidCodeBlocks(in: content)
+        let encodedPayload = Data(preparedMermaidContent.utf8).base64EncodedString()
+        return """
+        (() => {
+            if (typeof window.__muxyRenderMarkdown !== 'function') {
+                return false;
+            }
+            return window.__muxyRenderMarkdown("\(encodedPayload)");
+        })();
         """
     }
 

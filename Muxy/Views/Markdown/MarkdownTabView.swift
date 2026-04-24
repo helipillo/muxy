@@ -158,6 +158,14 @@ private enum MarkdownWebBridge {
 }
 
 struct MarkdownWebView: NSViewRepresentable {
+    struct ContentUpdateRequest {
+        let html: String
+        let content: String
+        let syncScrollRequest: MarkdownSyncPoint?
+        let syncScrollRequestVersion: Int
+        let filePath: String?
+    }
+
     struct Configuration {
         let scrollSyncEnabled: Bool
         let showsVerticalScroller: Bool
@@ -170,6 +178,7 @@ struct MarkdownWebView: NSViewRepresentable {
     }
 
     let html: String
+    let content: String
     let filePath: String?
     @Binding var syncScrollRequest: MarkdownSyncPoint?
     let syncScrollRequestVersion: Int
@@ -213,7 +222,7 @@ struct MarkdownWebView: NSViewRepresentable {
             )
         }
 
-        context.coordinator.loadHTML(html, filePath: filePath, into: webView)
+        context.coordinator.loadHTML(html, content: content, filePath: filePath, into: webView)
         return webView
     }
 
@@ -222,10 +231,13 @@ struct MarkdownWebView: NSViewRepresentable {
         context.coordinator.updateScrollerVisibility(in: webView)
         context.coordinator.updateContentScrollbarVisibility(in: webView)
         context.coordinator.updateHTML(
-            html,
-            syncScrollRequest: syncScrollRequest,
-            syncScrollRequestVersion: syncScrollRequestVersion,
-            filePath: filePath,
+            ContentUpdateRequest(
+                html: html,
+                content: content,
+                syncScrollRequest: syncScrollRequest,
+                syncScrollRequestVersion: syncScrollRequestVersion,
+                filePath: filePath
+            ),
             webView: webView
         )
     }
@@ -250,6 +262,8 @@ struct MarkdownWebView: NSViewRepresentable {
         private var activeNavigation: WKNavigation?
         private var loadCount: Int = 0
         private var currentFilePath: String?
+        private var lastRenderedContent: String = ""
+        private var pendingContent: String?
         private var scrollSyncEnabled = true
         private var lastConfiguredScrollSyncEnabled = true
         private var showsVerticalScroller = true
@@ -330,9 +344,11 @@ struct MarkdownWebView: NSViewRepresentable {
             programmaticScrollSuppressionUntil = nil
         }
 
-        func loadHTML(_ html: String, filePath: String?, into webView: WKWebView) {
+        func loadHTML(_ html: String, content: String, filePath: String?, into webView: WKWebView) {
             lastHTML = html
             currentFilePath = filePath
+            pendingContent = content
+            lastRenderedContent = ""
             lastAppliedSyncRequestVersion = -1
             lastReportedScrollTop = -1
             loadCount += 1
@@ -343,35 +359,49 @@ struct MarkdownWebView: NSViewRepresentable {
             activeNavigation = webView.loadHTMLString(html, baseURL: baseURL(for: filePath))
         }
 
-        func updateHTML(
-            _ html: String,
-            syncScrollRequest: MarkdownSyncPoint?,
-            syncScrollRequestVersion: Int,
-            filePath: String?,
-            webView: WKWebView
-        ) {
+        func updateHTML(_ request: ContentUpdateRequest, webView: WKWebView) {
             let syncWasJustEnabled = scrollSyncEnabled && !lastConfiguredScrollSyncEnabled
             lastConfiguredScrollSyncEnabled = scrollSyncEnabled
-            currentFilePath = filePath
-            if html != lastHTML {
-                lastHTML = html
-                pendingSyncPoint = scrollSyncEnabled ? syncScrollRequest : nil
-                pendingSyncRequestVersion = scrollSyncEnabled ? syncScrollRequestVersion : -1
+            currentFilePath = request.filePath
+            if request.html != lastHTML {
+                lastHTML = request.html
+                pendingContent = request.content
+                lastRenderedContent = ""
+                pendingSyncPoint = scrollSyncEnabled ? request.syncScrollRequest : nil
+                pendingSyncRequestVersion = scrollSyncEnabled ? request.syncScrollRequestVersion : -1
                 lastAppliedSyncRequestVersion = -1
                 loadCount += 1
                 isNavigationInFlight = true
                 markdownWebLogger.debug(
                     """
                     Markdown web update seq=\(self.loadCount)
-                    path=\(filePath ?? "<nil>", privacy: .public)
-                    htmlLength=\(html.utf8.count) pendingSyncRequestVersion=\(syncScrollRequestVersion)
+                    path=\(request.filePath ?? "<nil>", privacy: .public)
+                    htmlLength=\(request.html.utf8.count) pendingSyncRequestVersion=\(request.syncScrollRequestVersion)
                     """
                 )
-                activeNavigation = webView.loadHTMLString(html, baseURL: baseURL(for: filePath))
-            } else if scrollSyncEnabled, syncWasJustEnabled || syncScrollRequestVersion != lastAppliedSyncRequestVersion {
+                activeNavigation = webView.loadHTMLString(request.html, baseURL: baseURL(for: request.filePath))
+            } else if isNavigationInFlight {
+                pendingContent = request.content
+                if scrollSyncEnabled {
+                    pendingSyncPoint = request.syncScrollRequest
+                    pendingSyncRequestVersion = request.syncScrollRequestVersion
+                }
+            } else if request.content != lastRenderedContent {
+                applyContentUpdate(
+                    request.content,
+                    to: webView,
+                    reason: "swift-content-update"
+                )
+                if scrollSyncEnabled {
+                    pendingSyncPoint = request.syncScrollRequest
+                    pendingSyncRequestVersion = request.syncScrollRequestVersion
+                }
+            } else if scrollSyncEnabled,
+                      syncWasJustEnabled || request.syncScrollRequestVersion != lastAppliedSyncRequestVersion
+            {
                 applyPreferredScroll(
-                    requestVersion: syncScrollRequestVersion,
-                    syncPoint: syncScrollRequest,
+                    requestVersion: request.syncScrollRequestVersion,
+                    syncPoint: request.syncScrollRequest,
                     to: webView
                 )
             }
@@ -412,6 +442,41 @@ struct MarkdownWebView: NSViewRepresentable {
             )
         }
 
+        private func applyContentUpdate(
+            _ content: String,
+            to webView: WKWebView,
+            reason: String
+        ) {
+            let script = """
+            \(MarkdownRenderer.updateScript(content: content))
+            \(MarkdownPreviewAnchorGeometryBridge.requestMeasureScript(reason: reason))
+            """
+            webView.evaluateJavaScript(script) { _, error in
+                if let error {
+                    markdownWebLogger.error(
+                        "Failed updating markdown content in-place: \(error.localizedDescription, privacy: .public)"
+                    )
+                    return
+                }
+
+                self.lastRenderedContent = content
+                self.collectJavaScriptErrors(from: webView)
+                if self.scrollSyncEnabled,
+                   let pendingSyncPoint = self.pendingSyncPoint,
+                   self.pendingSyncRequestVersion >= 0
+                {
+                    let pendingRequestVersion = self.pendingSyncRequestVersion
+                    self.pendingSyncPoint = nil
+                    self.pendingSyncRequestVersion = -1
+                    self.applyPreferredScroll(
+                        requestVersion: pendingRequestVersion,
+                        syncPoint: pendingSyncPoint,
+                        to: webView
+                    )
+                }
+            }
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             if let navigation, let activeNavigation, navigation !== activeNavigation {
                 markdownWebLogger.debug("Ignoring didFinish for stale markdown navigation")
@@ -426,7 +491,14 @@ struct MarkdownWebView: NSViewRepresentable {
             )
             isNavigationInFlight = false
             lastAnchorGeometrySnapshot = []
-            if let pendingSyncPoint {
+            if let pendingContent {
+                self.pendingContent = nil
+                applyContentUpdate(
+                    pendingContent,
+                    to: webView,
+                    reason: "swift-didFinish"
+                )
+            } else if let pendingSyncPoint {
                 let pendingRequestVersion = pendingSyncRequestVersion
                 self.pendingSyncPoint = nil
                 pendingSyncRequestVersion = -1

@@ -131,6 +131,7 @@ struct EditorPane: View {
             } else {
                 MarkdownWebView(
                     html: renderedMarkdownHTML,
+                    content: renderedMarkdownContent,
                     filePath: state.filePath,
                     syncScrollRequest: $state.markdownPreviewScrollRequest,
                     syncScrollRequestVersion: state.markdownPreviewScrollRequestVersion,
@@ -160,7 +161,6 @@ struct EditorPane: View {
 
     private var renderedMarkdownHTML: String {
         MarkdownRenderer.html(
-            content: renderedMarkdownContent,
             anchors: state.markdownSyncAnchors(),
             filePath: state.filePath,
             palette: MarkdownRenderer.Palette(

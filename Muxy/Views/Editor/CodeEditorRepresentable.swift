@@ -1396,19 +1396,35 @@ struct CodeEditorView: NSViewRepresentable {
         }
 
         func performUndoRequest() -> Bool {
-            performViewportUndo()
+            if viewportState != nil {
+                return performViewportUndo()
+            }
+            guard let textView, textView.undoManager?.canUndo == true else { return false }
+            textView.undoManager?.undo()
+            return true
         }
 
         func performRedoRequest() -> Bool {
-            performViewportRedo()
+            if viewportState != nil {
+                return performViewportRedo()
+            }
+            guard let textView, textView.undoManager?.canRedo == true else { return false }
+            textView.undoManager?.redo()
+            return true
         }
 
         func canPerformUndoRequest() -> Bool {
-            !viewportUndoStack.isEmpty
+            if viewportState != nil {
+                return !viewportUndoStack.isEmpty
+            }
+            return textView?.undoManager?.canUndo ?? false
         }
 
         func canPerformRedoRequest() -> Bool {
-            !viewportRedoStack.isEmpty
+            if viewportState != nil {
+                return !viewportRedoStack.isEmpty
+            }
+            return textView?.undoManager?.canRedo ?? false
         }
 
         private func performViewportUndo() -> Bool {

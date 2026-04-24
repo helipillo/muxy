@@ -257,6 +257,29 @@ private struct EditorMarkdownModePicker: View {
 
     var body: some View {
         HStack(spacing: 2) {
+            if mode == .split {
+                Button {
+                    scrollSyncEnabled.toggle()
+                } label: {
+                    Image(systemName: "arrow.up.and.down")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(scrollSyncEnabled ? MuxyTheme.accent : MuxyTheme.fg)
+                        .frame(width: 22, height: 20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(scrollSyncEnabled ? MuxyTheme.surface : Color.clear)
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(scrollSyncEnabled ? "Disable Scroll Sync" : "Enable Scroll Sync")
+                .accessibilityLabel(scrollSyncEnabled ? "Disable Markdown Scroll Sync" : "Enable Markdown Scroll Sync")
+
+                Rectangle()
+                    .fill(MuxyTheme.border)
+                    .frame(width: 1, height: 14)
+                    .padding(.horizontal, 2)
+            }
             ForEach(EditorMarkdownViewMode.allCases, id: \.self) { candidate in
                 Button {
                     mode = candidate
@@ -268,18 +291,11 @@ private struct EditorMarkdownModePicker: View {
                             RoundedRectangle(cornerRadius: 4)
                                 .fill(mode == candidate ? MuxyTheme.surface : Color.clear)
                         )
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(candidate.title)
                 .accessibilityLabel("Markdown \(candidate.title) View")
-            }
-
-            if mode == .split {
-                Rectangle()
-                    .fill(MuxyTheme.border)
-                    .frame(width: 1, height: 14)
-                    .padding(.horizontal, 2)
-                EditorMarkdownScrollSyncButton(isEnabled: $scrollSyncEnabled)
             }
         }
         .padding(2)
@@ -289,34 +305,6 @@ private struct EditorMarkdownModePicker: View {
                 .stroke(MuxyTheme.border, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 6))
-    }
-}
-
-private struct EditorMarkdownScrollSyncButton: View {
-    @Binding var isEnabled: Bool
-
-    var body: some View {
-        Button {
-            isEnabled.toggle()
-        } label: {
-            Image(systemName: "arrow.up.and.down")
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(isEnabled ? MuxyTheme.accent : MuxyTheme.fgMuted)
-                .font(.system(size: 10, weight: .semibold))
-                .frame(width: 28, height: 20)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(isEnabled ? MuxyTheme.surface : Color.clear)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(isEnabled ? MuxyTheme.accent.opacity(0.35) : Color.clear, lineWidth: 1)
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(isEnabled ? "Disable Scroll Sync" : "Enable Scroll Sync")
-        .accessibilityLabel(isEnabled ? "Disable Markdown Scroll Sync" : "Enable Markdown Scroll Sync")
     }
 }
 

@@ -92,7 +92,6 @@ final class EditorTabState: Identifiable {
     @ObservationIgnored private var markdownSyncAnchorsCacheVersion: Int = -1
     @ObservationIgnored private(set) var syntaxHighlighter: SyntaxHighlighter?
 
-
     static let largeFileWarningThreshold: Int64 = 5 * 1024 * 1024
     static let largeFileRefuseThreshold: Int64 = 50 * 1024 * 1024
     static let initialOpenChunkSize = 512 * 1024

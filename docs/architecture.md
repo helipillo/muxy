@@ -46,6 +46,7 @@ Muxy/
     AppState.swift            @Observable root state, dispatches workspace actions
     WorkspaceReducer.swift    Pure reducer: all workspace state transitions
     WorkspaceSnapshot.swift   Save/restore workspace layout to disk
+    NavigationHistory.swift   Stacked back/forward history over project+worktree+area+tab tuples
     SplitNode.swift           Recursive binary tree for pane splits
     TabArea.swift             Container for tabs within a single pane
     TerminalTab.swift         Terminal, VCS, editor, or diff-viewer tab model
@@ -74,6 +75,21 @@ Muxy/
     NotificationStore.swift      @Observable notification store singleton (persisted to notifications.json)
     NotificationNavigator.swift  Pane context resolution + click-to-navigate dispatch
     NotificationSocketServer.swift  Unix domain socket IPC for external tool notifications
+    AIProviderIntegration.swift  Protocol + AIProviderRegistry (notification-hook integrations, usage provider registry)
+    AIUsageService.swift         @Observable @MainActor snapshot store, parallel fetch orchestration, refresh coalescing, row composition (Catalog, SnapshotComposer, RowPolicy)
+    AIUsagePreferences.swift     UserDefaults-backed stores: provider tracking/enabled toggles, display mode, auto-refresh interval, global enabled flag, auto-tracking
+    AIUsageProvider.swift        AIUsageProvider protocol (fetchUsageSnapshot) with default snapshot helper
+    AIUsageModels.swift          AIProviderUsageSnapshot, AIUsageMetricRow, state enum
+    AIUsageSession.swift         Shared request/response pipeline for token-auth HTTP providers
+    AIUsageOAuth.swift           OAuth access-token refresh + persistence for providers that use the flow
+    AIUsageTokenReader.swift     Reads tokens from env vars, JSON credential files, or macOS Keychain (/usr/bin/security)
+    AIUsageParserSupport.swift   Shared JSON navigation helpers (number/date/string extractors, formatters)
+    AIUsagePaceCalculator.swift  Projects end-of-period usage from current percent, reset date, and period duration
+    {Amp,Claude,Codex,Copilot,Factory,Kimi,MiniMax,Zai}UsageParser.swift  Per-provider JSON → metric row parsers
+    Providers/
+      ClaudeCodeProvider.swift     Claude hook install + usage fetch (OAuth token from env/credentials/keychain)
+      OpenCodeProvider.swift       OpenCode notification-hook integration
+      {Amp,Codex,Copilot,Factory,Kimi,MiniMax,Zai}UsageProvider.swift  Per-provider usage fetchers (AIUsageProvider)
     Git/
       GitRepositoryService.swift  Git command execution (Sendable struct; dispatches via GitProcessRunner)
       GitProcessRunner.swift      Concurrent Process dispatcher for git/gh, unblocks main thread
@@ -118,6 +134,8 @@ Muxy/
       ProjectIconColorPicker.swift  Preset color palette popover for tinting the default letter icon
       WorktreePopover.swift     Worktree picker popover triggered from the active project row
       CreateWorktreeSheet.swift Sheet for creating a new git worktree
+      AIUsagePanel.swift        AI usage popover: preview button, panel header/list, provider and metric rows, used/remaining conversion
+    ProviderIconView.swift    Renders SVG provider icons from Muxy/Resources/ProviderIcons with monochrome tinting
     ThemePicker.swift         Theme selection popover (hosted in topbar right)
     WelcomeView.swift         Empty state view
     Components/
@@ -164,6 +182,7 @@ Muxy/
       TerminalSettingsView.swift  Terminal preferences tab, including quick-select label layout
       KeyboardShortcutsSettingsView.swift  Shortcut config tab
       NotificationSettingsView.swift  Notification preferences tab
+      AIUsageSettingsView.swift  AI usage tab (global enable, display mode, auto-refresh, secondary limits, per-provider toggles)
       MobileSettingsView.swift  Mobile server and approved devices tab
       ShortcutRecorderView.swift  Shortcut capture field
       ShortcutBadge.swift     Shortcut label display
@@ -317,6 +336,38 @@ Pull request management lives entirely in the header via `PRPill`, not in the co
 
 On submit, `performPRFlow` runs: optional branch create+switch → optional stage (all if include=all, staged-only otherwise) → commit with title if anything is staged → `git push -u origin <branch>` → `gh pr create`. No rollback on partial failure — errors surface to the sheet with a clear message so the user can retry manually from wherever the flow stopped. Ahead/behind counts are populated by `GitRepositoryService.aheadBehind` during refresh and drive the push/pull badges in the commit area.
 
+## Navigation History
+
+`AppState` owns a `NavigationHistory` that captures a stacked history of
+user navigation across projects, worktrees, split areas, and tabs. Each
+entry is a `(projectID, worktreeID, areaID, tabID)` tuple. After every
+successful `dispatch`, the current tuple is recorded (deduping against the
+top of the stack). Selecting a different project, switching worktrees,
+focusing another split pane, or selecting a different tab all count as
+navigation events.
+
+Back/forward navigation is exposed via `AppState.goBack()` /
+`AppState.goForward()`. Both validate the target entry still references
+live state (the worktree root is still in `workspaceRoots`, the area and
+tab still exist) and transparently skip stale entries. The single state
+transition is driven through the reducer via a dedicated
+`Action.navigate(projectID:worktreeID:areaID:tabID:)` case so all
+workspace mutations stay in the reducer. Re-recording during a
+back/forward step is gated by
+`NavigationHistory.performWithRecordingSuppressed`. After every dispatch
+the history is swept: entries whose project, worktree, area, or tab no
+longer exist are removed eagerly, and the cursor snaps to the post-reducer
+active tuple when it is still present — so closing a tab simply takes
+that entry out of the stack rather than leaving a stale hop.
+
+The topbar hosts two chevron buttons (to the right of the sidebar border)
+wired to these calls. Keyboard (default `⌃⌘←` / `⌃⌘→`), mouse side
+buttons (buttons 3/4), and horizontal swipe gestures (Magic Mouse
+1-finger, 3-finger trackpad) all trigger the same actions. The main
+window's shortcut interceptor installs a local `addLocalMonitorForEvents`
+handler for `[.otherMouseDown, .swipe]`, gated on the monitored window
+being key and identified as a Muxy main window.
+
 ## Notification System
 
 Notifications alert users when terminal events occur (command completion, AI agent
@@ -357,6 +408,103 @@ originating pane.
 sequence: `selectProject` → `focusArea` → `selectTab`. System notifications encode
 the navigation context in `userInfo` and bring the app to front on click.
 
+## AI Usage Tracking
+
+Muxy displays live usage quota for the user's AI coding tools in a sidebar
+popover. Unlike the notification hooks, usage tracking is read-only: it reads
+credentials the user has already configured for each tool and queries the
+vendor's usage endpoint directly. Nothing is written to the tools' settings.
+
+### Component Map
+
+```
+AIUsageService (@Observable, @MainActor singleton)
+     │
+     ├── AIUsageSettingsStore / ProviderTrackingStore / ProviderEnabledStore
+     │     (UserDefaults-backed, in AIUsagePreferences.swift)
+     │
+     ├── AIUsageProviderCatalog
+     │     (built from AIProviderRegistry.usageProviders on first access)
+     │
+     ├── fetchSnapshots(for:)  ── TaskGroup ──►  provider.fetchUsageSnapshot() × N
+     │                                                  │
+     │                                                  ▼
+     │                          AIUsageTokenReader → env / JSON file / Keychain
+     │                          AIUsageOAuth       → refresh access token
+     │                          AIUsageSession     → HTTP request + common errors
+     │                          {Provider}UsageParser → JSON → [AIUsageMetricRow]
+     │
+     ├── AIUsageAutoTracking
+     │     (first time a provider returns data, mark it as tracked)
+     │
+     └── AIUsageSnapshotComposer + AIUsageRowPolicy
+           (filter to tracked providers, hide secondary rows unless opted in)
+```
+
+The service is observed by `SidebarFooter` (preview icon + popover) and
+`AIUsageSettingsView` (settings tab). Both hold the singleton as `let` and rely
+on the `@Observable` framework to invalidate on read.
+
+### Providers
+
+`AIUsageProvider` is the read-only counterpart to `AIProviderIntegration`. A
+single concrete type can adopt both (e.g. `ClaudeCodeProvider` installs hooks
+AND fetches usage). The registry (`AIProviderRegistry.usageProviders`) lists
+all usage providers; today:
+
+- Claude Code, Codex, Copilot, Amp, Z.ai, MiniMax, Kimi, Factory
+
+Each provider has a matching `{Name}UsageParser` that takes raw JSON and
+returns `[AIUsageMetricRow]`. Parsers are unit-tested against fixture payloads
+in `Tests/MuxyTests/Services/*UsageParserTests.swift`; HTTP paths are tested
+with `URLProtocol` stubs in `*UsageAPIClientTests.swift` where present.
+
+### Credentials
+
+`AIUsageTokenReader` is the single entry point for reading tokens and supports
+three sources, tried in provider-defined order:
+
+1. Environment variables (e.g. `CLAUDE_CODE_OAUTH_TOKEN`, `ZAI_API_KEY`).
+2. JSON credential files written by the vendor CLI under `~/.claude`,
+   `~/.codex`, etc. Some providers honor env-var overrides (`CLAUDE_CONFIG_DIR`,
+   `CODEX_HOME`) that match upstream CLI behavior.
+3. macOS Keychain via `/usr/bin/security find-generic-password`. The account
+   name is passed through `Process.arguments` (array form, not a shell string)
+   to avoid argument injection.
+
+OAuth providers that rotate access tokens (Factory, Kimi) use
+`AIUsageOAuth.refreshAccessToken` to exchange a refresh token and persist the
+updated credential file back to disk with the same shape the vendor CLI wrote.
+
+### Refresh Lifecycle
+
+`AIUsageService.refresh(force:)` and `refreshIfNeeded()` are coalesced: if a
+task is in-flight, subsequent callers await the existing task's result rather
+than starting a parallel fetch. The `@MainActor` isolation plus an internal
+`refreshTask` field gate concurrent entry. Auto-refresh cadence is driven by
+`AIUsageAutoRefreshInterval` (5m / 15m / 30m / 1h) persisted in UserDefaults; a
+60-second view-level timer in `SidebarFooter` calls `refreshIfNeeded` and the
+service decides whether enough time has elapsed.
+
+### Settings & Defaults
+
+Per-provider "tracked" and "enabled" flags live in UserDefaults keyed by the
+canonical provider ID (`muxy.usage.provider.<id>.{tracked,enabled}`). Global
+settings: `muxy.usage.enabled`, `muxy.usage.displayMode` (used/remaining),
+`muxy.usage.autoRefreshIntervalSeconds`, `muxy.usage.showSecondaryLimits`. On
+first launch `AIUsageSettingsStore.isUsageEnabled()` runs a one-shot migration:
+if any provider already has a tracked preference, the global flag is turned on
+so users who enabled tracking before the global toggle existed keep seeing the
+panel.
+
+### Row Policy
+
+`AIUsageRowPolicy` splits metric rows into primary (session / 5h / hourly /
+premium) and secondary (weekly / monthly / daily / billing) buckets by label
+prefix. By default the UI only shows primary rows; the "Show Secondary Limits"
+settings toggle opts in to the full list. Dollar-denominated detail strings
+are filtered out so the sidebar stays focused on usage quotas.
+
 ## Remote Server (MuxyServer)
 
 The desktop app embeds a WebSocket server (`MuxyRemoteServer`) that exposes
@@ -396,16 +544,61 @@ Request-response with server-pushed events:
 Platform-agnostic DTOs used by both apps. All types are `Codable` and `Sendable`.
 The `MuxyCodec` handles JSON encoding/decoding with ISO 8601 dates.
 
+### Terminal I/O Streaming
+
+Terminal traffic between Mac and remote clients flows as raw PTY bytes, not
+rendered cell grids. This relies on two additive exports on the `muxy-app/ghostty`
+fork (see [building-ghostty.md](building-ghostty.md)):
+
+- `ghostty_surface_set_data_callback(surface, cb, userdata)` — registers a
+  per-surface callback invoked on the termio thread every time Ghostty receives
+  a chunk of bytes from the PTY, before its emulator parses them.
+- `ghostty_surface_send_input_raw(surface, ptr, len)` — writes bytes directly
+  to the PTY, bypassing Ghostty's paste pipeline (no bracketed-paste wrapping,
+  no newline filtering, no keyboard-protocol interpretation).
+
+`RemoteTerminalStreamer` on the Mac registers the data callback on every
+terminal surface at creation (`GhosttyTerminalNSView.createSurface`),
+unregisters on teardown, and forwards bytes as `terminalOutput` events targeted
+at the owning client via `MuxyRemoteServer.send(_:to:)`. The event payload is
+a `TerminalOutputEventDTO` containing the paneID and a `Data` of raw bytes
+(base64-encoded on the JSON wire).
+
+Input from mobile flows as raw bytes (`TerminalInputParams.bytes: Data`,
+base64-encoded on the JSON wire) through `terminalInput → sendRemoteBytes →
+ghostty_surface_send_input_raw`, so every byte — including escape sequences,
+mouse reports, arrow keys, and control codes — is delivered to the child
+process verbatim.
+
 ### iOS App (MuxyMobile)
 
 `ConnectionManager` manages the WebSocket lifecycle and maintains a local mirror
 of the remote state (projects, workspace layout, notifications). It also keeps a
 rolling connection trace so mobile failures can surface a user-shareable
-technical report from the phone's error sheet. `TerminalView` renders the
-remote terminal grid locally, sends input back over the socket, and freezes the
-current snapshot during long-press text selection so copy actions operate on a
-stable view. Views observe this state and dispatch actions back through the
-connection.
+technical report from the phone's error sheet.
+
+`TerminalView` hosts a full VT emulator on-device via [SwiftTerm]
+(https://github.com/migueldeicaza/SwiftTerm), wrapped in a `UIViewRepresentable`
+as `SwiftTermRepresentable` / `MuxySwiftTermView`. The Mac streams raw PTY
+bytes to the owning client via `terminalOutput` events; `ConnectionManager`
+routes them via `subscribeTerminalBytes(paneID:handler:)` into
+`SwiftTerm.TerminalView.feed(byteArray:)`. User input from the on-screen
+keyboard flows out through `TerminalViewDelegate.send(source:data:)` back to
+`sendTerminalInput`. Text selection (double-tap for word, triple-tap for line),
+scrollback, tap-to-position, hardware-keyboard chords, accessibility, and
+predictive text all come from SwiftTerm's native implementation.
+
+Mobile scroll gestures are translated to escape sequences based on the remote
+TUI's state. When the remote program has enabled mouse reporting
+(`terminal.mouseMode != .off`), a custom `UIPanGestureRecognizer` on
+`MuxySwiftTermView` emits SGR mouse-wheel events
+(`ESC[<64;x;yM` / `ESC[<65;x;yM`) via `terminal.encodeButton` + `sendEvent`.
+When mouse reporting is off, SwiftTerm's built-in gesture converts panning into
+cursor-key sequences (`ESC[A/B`), which scrolls pagers and arrow-key-driven
+TUIs. The custom Muxy accessory bar (`TerminalAccessoryBar` +
+`TerminalAccessoryView`) is wired as `inputAccessoryView` and provides the
+D-pad, esc / tab / `~` / `|` / `/` / `-` keys, a long-press modifier arm-next
+key for Ctrl/Shift/Alt/Cmd chords, and Copy / Paste actions.
 
 ### Device Pairing
 

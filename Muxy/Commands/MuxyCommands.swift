@@ -2,6 +2,9 @@ import AppKit
 import SwiftUI
 
 struct MuxyCommands: Commands {
+    private static let undoSelector = #selector(NSResponder.undo(_:))
+    private static let redoSelector = #selector(NSResponder.redo(_:))
+
     let appState: AppState
     let projectStore: ProjectStore
     let worktreeStore: WorktreeStore
@@ -65,6 +68,18 @@ struct MuxyCommands: Commands {
                 Label("Check for Updates...", systemImage: "arrow.triangle.2.circlepath")
             }
             .disabled(!updateService.canCheckForUpdates)
+        }
+
+        CommandGroup(replacing: .undoRedo) {
+            Button("Undo") {
+                NSApp.sendAction(Self.undoSelector, to: nil, from: nil)
+            }
+            .keyboardShortcut("z", modifiers: .command)
+
+            Button("Redo") {
+                NSApp.sendAction(Self.redoSelector, to: nil, from: nil)
+            }
+            .keyboardShortcut("Z", modifiers: [.command, .shift])
         }
 
         CommandGroup(replacing: .pasteboard) {

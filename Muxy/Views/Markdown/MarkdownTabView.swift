@@ -6,6 +6,17 @@ import WebKit
 
 private let markdownWebLogger = Logger(subsystem: "app.muxy", category: "MarkdownWebView")
 
+private final class MarkdownPassiveWebView: WKWebView {
+    var blocksUserScrollInput = false
+
+    override func scrollWheel(with event: NSEvent) {
+        if blocksUserScrollInput {
+            return
+        }
+        super.scrollWheel(with: event)
+    }
+}
+
 extension WKWebView {
     var safeScrollView: NSScrollView? {
         for subview in subviews {
@@ -211,10 +222,11 @@ struct MarkdownWebView: NSViewRepresentable {
         let config = WKWebViewConfiguration()
         context.coordinator.installBridge(into: config)
 
-        let webView = WKWebView(frame: .zero, configuration: config)
+        let webView = MarkdownPassiveWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         context.coordinator.configure(with: configuration)
         context.coordinator.updateScrollerVisibility(in: webView)
+        context.coordinator.updateUserScrollInteractivity(in: webView)
         if scrollSyncEnabled {
             context.coordinator.applyPreferredScroll(
                 requestVersion: syncScrollRequestVersion,
@@ -230,6 +242,7 @@ struct MarkdownWebView: NSViewRepresentable {
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.configure(with: configuration)
         context.coordinator.updateScrollerVisibility(in: webView)
+        context.coordinator.updateUserScrollInteractivity(in: webView)
         context.coordinator.updateContentScrollbarVisibility(in: webView)
         context.coordinator.updateHTML(
             ContentUpdateRequest(
@@ -298,6 +311,11 @@ struct MarkdownWebView: NSViewRepresentable {
             if scrollView.autohidesScrollers != showsVerticalScroller {
                 scrollView.autohidesScrollers = showsVerticalScroller
             }
+        }
+
+        func updateUserScrollInteractivity(in webView: WKWebView) {
+            guard let webView = webView as? MarkdownPassiveWebView else { return }
+            webView.blocksUserScrollInput = scrollSyncEnabled && hidesContentScrollbar
         }
 
         func updateContentScrollbarVisibility(in webView: WKWebView) {

@@ -224,6 +224,10 @@ struct MarkdownWebView: NSViewRepresentable {
             MarkdownAssetSchemeHandler(),
             forURLScheme: MarkdownAssetSchemeHandler.scheme
         )
+        config.setURLSchemeHandler(
+            MarkdownLocalImageSchemeHandler(),
+            forURLScheme: MarkdownLocalImageSchemeHandler.scheme
+        )
         context.coordinator.installBridge(into: config)
 
         let webView = MarkdownPassiveWebView(frame: .zero, configuration: config)

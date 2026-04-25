@@ -184,6 +184,7 @@ enum MarkdownRenderer {
         let syntaxCSS = SyntaxHTMLRenderer.cssStylesheet(background: codeBackground, foreground: palette.foreground)
 
         let title = escapeForHTML(filePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Markdown")
+        let imageBaseHost = filePath.flatMap { encodedImageBaseHost(forMarkdownFilePath: $0) } ?? ""
         return """
         <!DOCTYPE html>
         <html>
@@ -373,6 +374,7 @@ enum MarkdownRenderer {
                 <div id="markdown" class="markdown-body"></div>
             </div>
             <script>
+                window.__muxyImageBaseHost = "\(imageBaseHost)";
                 window.__muxyErrors = window.__muxyErrors || [];
                 window.addEventListener('error', function(event) {
                     try {
@@ -907,6 +909,7 @@ enum MarkdownRenderer {
                     if (!markdownRoot) {
                         return;
                     }
+                    var baseHost = window.__muxyImageBaseHost || '';
                     var images = markdownRoot.querySelectorAll('img[src]');
                     images.forEach(function(image) {
                         var rawSrc = image.getAttribute('src');
@@ -922,9 +925,12 @@ enum MarkdownRenderer {
                         if (hasScheme || trimmed.startsWith('//') || lower.startsWith('data:') || lower.startsWith('blob:')) {
                             return;
                         }
-                        try {
-                            image.setAttribute('src', new URL(trimmed, document.baseURI).href);
-                        } catch (_) {}
+                        if (!baseHost) {
+                            return;
+                        }
+                        var relative = trimmed.replace(/^\\/+/, '');
+                        var encodedRelative = relative.split('/').map(encodeURIComponent).join('/');
+                        image.setAttribute('src', 'muxy-md-image://' + baseHost + '/' + encodedRelative);
                     });
                 }
 
@@ -1163,6 +1169,15 @@ enum MarkdownRenderer {
 
         markdownLogger.error("Failed to convert NSColor to RGB hex, using fallback")
         return "1E1E1E"
+    }
+
+    private static func encodedImageBaseHost(forMarkdownFilePath path: String) -> String? {
+        let directory = URL(fileURLWithPath: path).deletingLastPathComponent().standardizedFileURL.path
+        guard let data = directory.data(using: .utf8) else { return nil }
+        return data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 
     private static func isDarkColor(_ color: NSColor) -> Bool {

@@ -177,6 +177,7 @@ enum MarkdownRenderer {
             pie12: "#\(mermaidTertiaryHex)"
         )
         let mermaidThemeVariablesJSON = mermaidThemeVariables.jsObjectLiteral
+        let syntaxCSS = SyntaxHTMLRenderer.cssStylesheet()
 
         let title = escapeForHTML(filePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Markdown")
         return """
@@ -186,15 +187,6 @@ enum MarkdownRenderer {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>\(title)</title>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" crossorigin="anonymous"></script>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js" crossorigin="anonymous"></script>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/swift.min.js" crossorigin="anonymous"></script>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js" crossorigin="anonymous"></script>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js" crossorigin="anonymous"></script>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/typescript.min.js" crossorigin="anonymous"></script>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js" crossorigin="anonymous"></script>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/yaml.min.js" crossorigin="anonymous"></script>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/shell.min.js" crossorigin="anonymous"></script>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js" crossorigin="anonymous"></script>
             <style>
                 :root {
@@ -366,22 +358,9 @@ enum MarkdownRenderer {
                     font-size: 13px;
                     margin: 16px 0;
                 }
-                .hljs { background: transparent !important; color: var(--fg) !important; }
-                .hljs-comment,
-                .hljs-quote { color: var(--muted) !important; }
-                .hljs-keyword,
-                .hljs-selector-tag,
-                .hljs-subst { color: var(--accent) !important; }
-                .hljs-string,
-                .hljs-title,
-                .hljs-name,
-                .hljs-type,
-                .hljs-attribute,
-                .hljs-literal,
-                .hljs-number,
-                .hljs-symbol,
-                .hljs-bullet,
-                .hljs-built_in { color: var(--fg) !important; }
+                .markdown-body pre.muxy-prehl { background: var(--code-bg); }
+                .markdown-body pre.muxy-prehl code.muxy-hl { color: var(--fg); }
+                \(syntaxCSS)
             </style>
         </head>
         <body>
@@ -1068,19 +1047,10 @@ enum MarkdownRenderer {
                         _markedConfigured = true;
                     }
                     marked.setOptions({
-                        highlight: function(code, lang) {
-                            if (lang && hljs.getLanguage(lang)) {
-                                try {
-                                    return hljs.highlight(code, { language: lang }).value;
-                                } catch (_) {}
-                            }
-                            return hljs.highlightAuto(code).value;
-                        },
                         breaks: false,
                         gfm: true,
                     });
 
-                    // Replace Mermaid code blocks before marked parses them
                     var diagramMap = {};
                     content = content.replace(/```mermaid\\s*\\r?\\n([\\s\\S]*?)```/g, function(match, code) {
                         var id = 'mermaid-' + Object.keys(diagramMap).length;
@@ -1105,12 +1075,6 @@ enum MarkdownRenderer {
                     assignAnchorMetadata(markdownRoot, anchors);
                     initializeMermaidControls();
 
-                    // Apply syntax highlighting to non-mermaid code blocks
-                    document.querySelectorAll('pre code:not(.hljs)').forEach(function(block) {
-                        hljs.highlightElement(block);
-                    });
-
-                    // Render mermaid diagrams
                     if (Object.keys(diagramMap).length > 0) {
                         try {
                             var mermaidReady = await ensureMermaidLoaded();
@@ -1170,7 +1134,8 @@ enum MarkdownRenderer {
 
     static func updateScript(content: String) -> String {
         let preparedMermaidContent = MermaidCodeBlockNormalizer.normalizeMermaidCodeBlocks(in: content)
-        let encodedPayload = Data(preparedMermaidContent.utf8).base64EncodedString()
+        let preparedContent = MarkdownCodeBlockHighlighter.prerenderCodeBlocks(in: preparedMermaidContent)
+        let encodedPayload = Data(preparedContent.utf8).base64EncodedString()
         return """
         (() => {
             if (typeof window.__muxyRenderMarkdown !== 'function') {

@@ -94,7 +94,7 @@ enum MarkdownAnchorParser {
 
     private static func makeAnchor(kind: MarkdownSyncAnchorKind, startIndex: Int, endIndex: Int, ordinal: Int) -> MarkdownSyncAnchor {
         MarkdownSyncAnchor(
-            id: "anchor-\(ordinal + 1)-\(startIndex + 1)-\(endIndex + 1)",
+            id: "anchor-\(kind.rawValue)-\(ordinal + 1)",
             kind: kind,
             startLine: startIndex + 1,
             endLine: endIndex + 1

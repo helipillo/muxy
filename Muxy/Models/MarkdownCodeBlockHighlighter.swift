@@ -2,7 +2,7 @@ import Foundation
 
 enum MarkdownCodeBlockHighlighter {
     private static let fenceRegex = try? NSRegularExpression(
-        pattern: "(^|\\n)([ \\t]*)```([^\\n`]*)\\r?\\n([\\s\\S]*?)\\r?\\n[ \\t]*```(?=\\n|$)",
+        pattern: "(^|\\n)([ \\t]{0,8})```([^\\n`]*)\\r?\\n([\\s\\S]*?)\\r?\\n[ \\t]{0,8}```(?=\\n|$)",
         options: []
     )
 

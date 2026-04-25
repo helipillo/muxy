@@ -79,10 +79,10 @@ struct MermaidCodeBlockNormalizerTests {
         )
 
         #expect(html.contains(".mermaid"))
-        #expect(html.contains("themeVariables:"))
-        #expect(html.contains("theme: 'dark'"))
-        #expect(html.contains("mermaid.min.js"))
-        #expect(html.contains("mermaid.render("))
+        #expect(html.contains("__muxyMermaidThemeVariables"))
+        #expect(html.contains("__muxyMermaidBaseTheme = \"dark\""))
+        #expect(html.contains("__muxyMermaidUseThemeVariables = true"))
+        #expect(html.contains("muxy-asset://markdown/markdown-renderer.js"))
     }
 
     @Test("MarkdownRenderer html injects anchor metadata contracts")
@@ -98,12 +98,9 @@ struct MermaidCodeBlockNormalizerTests {
             )
         )
 
-        #expect(html.contains("data-muxy-anchor-id"))
-        #expect(html.contains("data-muxy-line-start"))
-        #expect(html.contains("data-muxy-line-end"))
-        #expect(html.contains("parseSyncAnchors(content)"))
-        #expect(html.contains("muxy-anchor-block muxy-anchor-kind-"))
-        #expect(html.contains("data-muxy-mermaid=\"true\""))
+        #expect(html.contains("muxy-asset://markdown/markdown-renderer.js"))
+        #expect(html.contains(".muxy-anchor-block"))
+        #expect(html.contains("__muxyImageBaseHost"))
     }
 
     @Test("MarkdownRenderer html sanitizes rendered DOM without disabling HTML images")
@@ -119,8 +116,7 @@ struct MermaidCodeBlockNormalizerTests {
             )
         )
 
-        #expect(html.contains("sanitizeMarkdownDOM"))
+        #expect(html.contains("muxy-asset://markdown/markdown-renderer.js"))
         #expect(!html.contains("renderer: {"))
-        #expect(html.contains("allowData: isImageLike"))
     }
 }

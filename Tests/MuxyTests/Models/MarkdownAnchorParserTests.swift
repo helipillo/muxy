@@ -123,7 +123,29 @@ struct MarkdownAnchorParserTests {
         let anchors = MarkdownAnchorParser.parseAnchors(in: markdown)
 
         #expect(anchors.count == 2)
-        #expect(anchors[0].id == "anchor-1-2-2")
-        #expect(anchors[1].id == "anchor-2-4-4")
+        #expect(anchors[0].id == "anchor-heading-1")
+        #expect(anchors[1].id == "anchor-paragraph-2")
+    }
+
+    @Test("anchor ids stay stable when leading lines are inserted")
+    func stableIDsAcrossEdits() {
+        let before = """
+        # Title
+
+        Paragraph
+        """
+
+        let after = """
+
+
+        # Title
+
+        Paragraph
+        """
+
+        let beforeAnchors = MarkdownAnchorParser.parseAnchors(in: before)
+        let afterAnchors = MarkdownAnchorParser.parseAnchors(in: after)
+
+        #expect(beforeAnchors.map(\.id) == afterAnchors.map(\.id))
     }
 }

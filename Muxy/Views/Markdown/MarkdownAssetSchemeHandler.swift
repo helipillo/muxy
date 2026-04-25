@@ -8,6 +8,7 @@ final class MarkdownAssetSchemeHandler: NSObject, WKURLSchemeHandler {
     private static let allowedFiles: Set<String> = [
         "marked.min.js",
         "mermaid.min.js",
+        "markdown-renderer.js",
     ]
 
     private static let mimeTypes: [String: String] = [

@@ -220,6 +220,10 @@ struct MarkdownWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        config.setURLSchemeHandler(
+            MarkdownAssetSchemeHandler(),
+            forURLScheme: MarkdownAssetSchemeHandler.scheme
+        )
         context.coordinator.installBridge(into: config)
 
         let webView = MarkdownPassiveWebView(frame: .zero, configuration: config)

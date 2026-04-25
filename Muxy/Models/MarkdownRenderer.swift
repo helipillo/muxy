@@ -177,7 +177,11 @@ enum MarkdownRenderer {
             pie12: "#\(mermaidTertiaryHex)"
         )
         let mermaidThemeVariablesJSON = mermaidThemeVariables.jsObjectLiteral
-        let syntaxCSS = SyntaxHTMLRenderer.cssStylesheet()
+        let isDarkPreview = isDarkColor(palette.background)
+        let mermaidBaseTheme = isDarkPreview ? "dark" : "default"
+        let colorScheme = isDarkPreview ? "dark" : "light"
+        let codeBackground = blend(foreground: palette.foreground, background: palette.background, amount: 0.08)
+        let syntaxCSS = SyntaxHTMLRenderer.cssStylesheet(background: codeBackground, foreground: palette.foreground)
 
         let title = escapeForHTML(filePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Markdown")
         return """
@@ -187,9 +191,10 @@ enum MarkdownRenderer {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>\(title)</title>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js" crossorigin="anonymous"></script>
+            <script src="muxy-asset://markdown/marked.min.js"></script>
             <style>
                 :root {
+                    color-scheme: \(colorScheme);
                     --bg: #\(bgHex);
                     --fg: #\(fgHex);
                     --accent: #\(accentHex);
@@ -552,8 +557,7 @@ enum MarkdownRenderer {
                     }
 
                     var urls = [
-                        'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js',
-                        'https://unpkg.com/mermaid@10/dist/mermaid.min.js'
+                        'muxy-asset://markdown/mermaid.min.js'
                     ];
 
                     for (var i = 0; i < urls.length; i++) {
@@ -1081,7 +1085,7 @@ enum MarkdownRenderer {
                             if (mermaidReady && typeof mermaid !== 'undefined') {
                                 mermaid.initialize({
                                     startOnLoad: false,
-                                    theme: 'base',
+                                    theme: '\(mermaidBaseTheme)',
                                     themeVariables: \(mermaidThemeVariablesJSON)
                                 });
                                 for (var id in diagramMap) {
@@ -1159,6 +1163,12 @@ enum MarkdownRenderer {
 
         markdownLogger.error("Failed to convert NSColor to RGB hex, using fallback")
         return "1E1E1E"
+    }
+
+    private static func isDarkColor(_ color: NSColor) -> Bool {
+        guard let rgb = color.usingColorSpace(.sRGB) else { return false }
+        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+        return luminance < 0.5
     }
 
     private static func blend(foreground: NSColor, background: NSColor, amount: CGFloat) -> NSColor {

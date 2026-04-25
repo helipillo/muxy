@@ -49,7 +49,7 @@ enum SyntaxHTMLRenderer {
     }
 
     @MainActor
-    static func cssStylesheet() -> String {
+    static func cssStylesheet(background: NSColor, foreground: NSColor) -> String {
         let allScopes: [SyntaxScope] = [
             .keyword, .storage, .type, .builtin, .constant, .string, .stringEscape,
             .number, .comment, .docComment, .function, .variable, .attribute,
@@ -58,10 +58,39 @@ enum SyntaxHTMLRenderer {
         ]
         var css = ""
         for scope in allScopes {
-            let hex = colorHex(SyntaxTheme.color(for: scope))
+            let resolved = htmlColor(for: scope, foreground: foreground, background: background)
+            let hex = colorHex(flatten(resolved, against: background))
             css += ".\(cssClass(for: scope)) { color: #\(hex); }\n"
         }
         return css
+    }
+
+    @MainActor
+    private static func htmlColor(
+        for scope: SyntaxScope,
+        foreground: NSColor,
+        background: NSColor
+    ) -> NSColor {
+        switch scope {
+        case .comment,
+             .docComment:
+            blend(foreground: foreground, background: background, amount: 0.55)
+        default:
+            SyntaxTheme.color(for: scope)
+        }
+    }
+
+    private static func blend(foreground: NSColor, background: NSColor, amount: CGFloat) -> NSColor {
+        guard let fg = foreground.usingColorSpace(.sRGB),
+              let bg = background.usingColorSpace(.sRGB)
+        else {
+            return foreground
+        }
+        let a = max(0, min(1, amount))
+        let r = bg.redComponent + (fg.redComponent - bg.redComponent) * a
+        let g = bg.greenComponent + (fg.greenComponent - bg.greenComponent) * a
+        let b = bg.blueComponent + (fg.blueComponent - bg.blueComponent) * a
+        return NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
     }
 
     private static func renderLine(line: String, tokens: [TokenSpan]) -> String {
@@ -120,6 +149,22 @@ enum SyntaxHTMLRenderer {
             }
         }
         return result
+    }
+
+    private static func flatten(_ color: NSColor, against background: NSColor) -> NSColor {
+        guard let fg = color.usingColorSpace(.sRGB),
+              let bg = background.usingColorSpace(.sRGB)
+        else {
+            return color
+        }
+        let alpha = fg.alphaComponent
+        if alpha >= 0.999 {
+            return fg
+        }
+        let r = bg.redComponent + (fg.redComponent - bg.redComponent) * alpha
+        let g = bg.greenComponent + (fg.greenComponent - bg.greenComponent) * alpha
+        let b = bg.blueComponent + (fg.blueComponent - bg.blueComponent) * alpha
+        return NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
     }
 
     private static func colorHex(_ color: NSColor) -> String {

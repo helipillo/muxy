@@ -674,7 +674,9 @@
                 if (mermaidReady && typeof mermaid !== 'undefined') {
                     var mermaidConfig = {
                         startOnLoad: false,
-                        theme: window.__muxyMermaidBaseTheme || 'default'
+                        securityLevel: 'strict',
+                        theme: window.__muxyMermaidBaseTheme || 'default',
+                        flowchart: { htmlLabels: false }
                     };
                     if (window.__muxyMermaidUseThemeVariables && window.__muxyMermaidThemeVariables) {
                         mermaidConfig.themeVariables = window.__muxyMermaidThemeVariables;

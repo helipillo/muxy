@@ -279,6 +279,8 @@ struct MarkdownWebView: NSViewRepresentable {
         private var isNavigationInFlight = false
         private var programmaticScrollSuppressionUntil: Date?
         private var lastAnchorGeometrySnapshot: [MarkdownPreviewAnchorGeometry] = []
+        private var lastAppliedHideContentScrollbar = false
+        private var lastAppliedLinkedScroll = false
 
         func configure(with configuration: Configuration) {
             scrollSyncEnabled = configuration.scrollSyncEnabled
@@ -301,17 +303,26 @@ struct MarkdownWebView: NSViewRepresentable {
         }
 
         func updateContentScrollbarVisibility(in webView: WKWebView) {
-            let hideScrollbar = hidesContentScrollbar ? "true" : "false"
-            let linkedScroll = scrollSyncEnabled && hidesContentScrollbar ? "true" : "false"
+            let hideScrollbar = hidesContentScrollbar
+            let linkedScroll = scrollSyncEnabled && hidesContentScrollbar
+            guard hideScrollbar != lastAppliedHideContentScrollbar || linkedScroll != lastAppliedLinkedScroll else {
+                return
+            }
+
+            lastAppliedHideContentScrollbar = hideScrollbar
+            lastAppliedLinkedScroll = linkedScroll
+
+            let hideScrollbarLiteral = hideScrollbar ? "true" : "false"
+            let linkedScrollLiteral = linkedScroll ? "true" : "false"
             let script = """
             (() => {
                 const root = document.documentElement;
                 if (!root) return;
                 root.classList.toggle('muxy-hide-content-scrollbar', \(
-                    hideScrollbar
+                    hideScrollbarLiteral
                 ));
                 root.classList.toggle('muxy-linked-scroll', \(
-                    linkedScroll
+                    linkedScrollLiteral
                 ));
             })();
             """
@@ -360,6 +371,8 @@ struct MarkdownWebView: NSViewRepresentable {
             lastRenderedContent = ""
             lastAppliedSyncRequestVersion = -1
             lastReportedScrollTop = -1
+            lastAppliedHideContentScrollbar = false
+            lastAppliedLinkedScroll = false
             loadCount += 1
             isNavigationInFlight = true
             markdownWebLogger.debug(

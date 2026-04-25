@@ -402,7 +402,7 @@ struct MarkdownWebView: NSViewRepresentable {
             markdownWebLogger.debug(
                 "Markdown web load seq=\(self.loadCount) path=\(filePath ?? "<nil>", privacy: .public) htmlLength=\(html.utf8.count)"
             )
-            activeNavigation = webView.loadHTMLString(html, baseURL: baseURL(for: filePath))
+            activeNavigation = webView.loadHTMLString(html, baseURL: nil)
         }
 
         func updateHTML(_ request: ContentUpdateRequest, webView: WKWebView) {
@@ -425,7 +425,7 @@ struct MarkdownWebView: NSViewRepresentable {
                     htmlLength=\(request.html.utf8.count) pendingSyncRequestVersion=\(request.syncScrollRequestVersion)
                     """
                 )
-                activeNavigation = webView.loadHTMLString(request.html, baseURL: baseURL(for: request.filePath))
+                activeNavigation = webView.loadHTMLString(request.html, baseURL: nil)
             } else if isNavigationInFlight {
                 pendingContent = request.content
                 if scrollSyncEnabled {
@@ -453,28 +453,34 @@ struct MarkdownWebView: NSViewRepresentable {
             }
         }
 
-        private func baseURL(for filePath: String?) -> URL? {
-            guard let filePath else { return nil }
-            let fileURL = URL(fileURLWithPath: filePath)
-            return fileURL.deletingLastPathComponent()
-        }
-
         @MainActor
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
         ) {
-            guard navigationAction.navigationType == .linkActivated,
-                  let url = navigationAction.request.url
-            else {
-                decisionHandler(.allow)
+            if navigationAction.navigationType == .linkActivated,
+               let url = navigationAction.request.url
+            {
+                if let scheme = url.scheme?.lowercased(), ["http", "https", "mailto"].contains(scheme) {
+                    NSWorkspace.shared.open(url)
+                }
+                decisionHandler(.cancel)
                 return
             }
 
-            if let scheme = url.scheme?.lowercased(), ["http", "https", "mailto"].contains(scheme) {
-                NSWorkspace.shared.open(url)
+            guard let url = navigationAction.request.url else {
                 decisionHandler(.cancel)
+                return
+            }
+
+            let scheme = url.scheme?.lowercased() ?? ""
+            let isMainFrameInitialLoad = navigationAction.targetFrame?.isMainFrame == true
+                && navigationAction.navigationType == .other
+                && (scheme == "about" || url.absoluteString == "about:blank")
+
+            if isMainFrameInitialLoad {
+                decisionHandler(.allow)
                 return
             }
 
@@ -497,7 +503,7 @@ struct MarkdownWebView: NSViewRepresentable {
             \(MarkdownRenderer.updateScript(content: content))
             \(MarkdownPreviewAnchorGeometryBridge.requestMeasureScript(reason: reason))
             """
-            webView.evaluateJavaScript(script) { _, error in
+            webView.evaluateJavaScript(script) { [weak self] _, error in
                 if let error {
                     markdownWebLogger.error(
                         "Failed updating markdown content in-place: \(error.localizedDescription, privacy: .public)"
@@ -505,6 +511,7 @@ struct MarkdownWebView: NSViewRepresentable {
                     return
                 }
 
+                guard let self else { return }
                 self.lastRenderedContent = content
                 self.collectJavaScriptErrors(from: webView)
                 if self.scrollSyncEnabled,
@@ -665,10 +672,10 @@ struct MarkdownWebView: NSViewRepresentable {
             isApplyingProgrammaticScroll = true
             programmaticScrollSuppressionUntil = Date().addingTimeInterval(Self.programmaticScrollSuppressionWindow)
             let script = MarkdownWebBridge.scrollToSyncPointScript(syncPoint)
-            webView.evaluateJavaScript(script) { _, error in
+            webView.evaluateJavaScript(script) { [weak self] _, error in
                 if let error {
-                    self.isApplyingProgrammaticScroll = false
-                    self.programmaticScrollSuppressionUntil = nil
+                    self?.isApplyingProgrammaticScroll = false
+                    self?.programmaticScrollSuppressionUntil = nil
                     markdownWebLogger.error(
                         """
                         Failed applying markdown sync scroll
@@ -678,7 +685,7 @@ struct MarkdownWebView: NSViewRepresentable {
                     return
                 }
 
-                self.lastAppliedSyncRequestVersion = requestVersion
+                self?.lastAppliedSyncRequestVersion = requestVersion
             }
         }
 

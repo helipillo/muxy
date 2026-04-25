@@ -5,17 +5,37 @@ import WebKit
 final class MarkdownLocalImageSchemeHandler: NSObject, WKURLSchemeHandler {
     static let scheme = "muxy-md-image"
 
+    private static let maxImageBytes: Int = 50 * 1024 * 1024
+
+    private static let allowedMIMEPrefixes: [String] = [
+        "image/",
+    ]
+
     func webView(_: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let url = urlSchemeTask.request.url,
               url.scheme == Self.scheme,
-              let resolved = Self.resolveFileURL(from: url),
-              let data = try? Data(contentsOf: resolved)
+              let resolved = Self.resolveFileURL(from: url)
         else {
             urlSchemeTask.didFailWithError(URLError(.fileDoesNotExist))
             return
         }
 
         let mimeType = Self.mimeType(for: resolved)
+        guard Self.isAllowedMIME(mimeType) else {
+            urlSchemeTask.didFailWithError(URLError(.unsupportedURL))
+            return
+        }
+
+        guard let fileSize = Self.fileSize(at: resolved), fileSize <= Self.maxImageBytes else {
+            urlSchemeTask.didFailWithError(URLError(.dataLengthExceedsMaximum))
+            return
+        }
+
+        guard let data = try? Data(contentsOf: resolved) else {
+            urlSchemeTask.didFailWithError(URLError(.fileDoesNotExist))
+            return
+        }
+
         let response = HTTPURLResponse(
             url: url,
             statusCode: 200,
@@ -23,6 +43,7 @@ final class MarkdownLocalImageSchemeHandler: NSObject, WKURLSchemeHandler {
             headerFields: [
                 "Content-Type": mimeType,
                 "Content-Length": String(data.count),
+                "Cache-Control": "no-cache",
             ]
         )
 
@@ -62,18 +83,31 @@ final class MarkdownLocalImageSchemeHandler: NSObject, WKURLSchemeHandler {
             return nil
         }
 
-        let baseURL = URL(fileURLWithPath: directory, isDirectory: true).standardizedFileURL
+        let baseRoot = URL(fileURLWithPath: directory, isDirectory: true)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
         let rawRelative = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard !rawRelative.isEmpty else { return nil }
         let decodedRelative = rawRelative.removingPercentEncoding ?? rawRelative
 
-        let candidate = baseURL.appendingPathComponent(decodedRelative).standardizedFileURL
-        let basePath = baseURL.path
+        let candidate = baseRoot.appendingPathComponent(decodedRelative)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        let basePath = baseRoot.path
         let candidatePath = candidate.path
         guard candidatePath == basePath || candidatePath.hasPrefix(basePath + "/") else {
             return nil
         }
         return candidate
+    }
+
+    private static func fileSize(at url: URL) -> Int? {
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+              let size = values.fileSize
+        else {
+            return nil
+        }
+        return size
     }
 
     private static func mimeType(for url: URL) -> String {
@@ -83,5 +117,10 @@ final class MarkdownLocalImageSchemeHandler: NSObject, WKURLSchemeHandler {
             return preferred
         }
         return "application/octet-stream"
+    }
+
+    private static func isAllowedMIME(_ mimeType: String) -> Bool {
+        let lowered = mimeType.lowercased()
+        return allowedMIMEPrefixes.contains { lowered.hasPrefix($0) }
     }
 }

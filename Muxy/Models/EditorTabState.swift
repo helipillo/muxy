@@ -174,7 +174,7 @@ final class EditorTabState: Identifiable {
 
         guard abs(targetY - currentY) > 0.1 else { return }
 
-        markdownScrollDriver = .editor
+        markdownScrollDriver = .preview
         scrollView.contentView.setBoundsOrigin(NSPoint(x: scrollView.contentView.bounds.origin.x, y: targetY))
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }

@@ -10,7 +10,7 @@ enum MarkdownAnchorParser {
 
         while index < lines.count {
             let line = lines[index]
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
 
             if trimmed.isEmpty {
                 index += 1
@@ -85,7 +85,11 @@ enum MarkdownAnchorParser {
     }
 
     private static func splitLines(_ markdown: String) -> [String] {
-        markdown.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        markdown
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
     }
 
     private static func makeAnchor(kind: MarkdownSyncAnchorKind, startIndex: Int, endIndex: Int, ordinal: Int) -> MarkdownSyncAnchor {

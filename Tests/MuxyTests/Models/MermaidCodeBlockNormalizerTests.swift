@@ -68,13 +68,6 @@ struct MermaidCodeBlockNormalizerTests {
     @Test("MarkdownRenderer html uses Mermaid.js rendering")
     @MainActor
     func markdownRendererUsesMermaidJSOnly() {
-        let markdown = """
-        ```mermaid
-        graph TD
-        A[Hello\\nWorld] --> B
-        ```
-        """
-
         let html = MarkdownRenderer.html(
             anchors: [],
             filePath: nil,
@@ -94,23 +87,6 @@ struct MermaidCodeBlockNormalizerTests {
     @Test("MarkdownRenderer html injects anchor metadata contracts")
     @MainActor
     func markdownRendererInjectsAnchorMetadataContracts() {
-        let markdown = """
-        # Title
-
-        Paragraph
-
-        ![alt](image.png)
-
-        | A | B |
-        | - | - |
-        | 1 | 2 |
-
-        ```mermaid
-        graph TD
-        A --> B
-        ```
-        """
-
         let html = MarkdownRenderer.html(
             anchors: [],
             filePath: nil,
@@ -132,12 +108,6 @@ struct MermaidCodeBlockNormalizerTests {
     @Test("MarkdownRenderer html sanitizes rendered DOM without disabling HTML images")
     @MainActor
     func markdownRendererSanitizesDOMButAllowsHTMLImages() {
-        let markdown = #"""
-        <img src="images/photo.png" alt="Photo" onclick="alert('x')">
-        <script>alert('x')</script>
-        [unsafe](javascript:alert('x'))
-        """#
-
         let html = MarkdownRenderer.html(
             anchors: [],
             filePath: "/tmp/readme.md",

@@ -97,7 +97,21 @@ final class MarkdownSyncCoordinator {
     }
 
     func previewDidRelayout() -> Output {
-        Output()
+        guard driver == .editor,
+              let lastIssuedPreviewPoint
+        else {
+            return Output()
+        }
+
+        let timestamp = now()
+        let relayoutDelay: TimeInterval = 0.05
+        let relayoutWindow: TimeInterval = 1.0
+        let elapsed = timestamp - lastIssuedPreviewTime
+        guard elapsed >= relayoutDelay, elapsed <= relayoutWindow else {
+            return Output()
+        }
+
+        return Output(requestPreviewScroll: lastIssuedPreviewPoint)
     }
 
     private func shouldAcceptUpdate(

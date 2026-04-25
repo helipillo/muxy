@@ -2,7 +2,7 @@ import Foundation
 
 enum MermaidCodeBlockNormalizer {
     private static let mermaidFenceRegex = try? NSRegularExpression(
-        pattern: "```mermaid\\s*\\n([\\s\\S]*?)```",
+        pattern: "```mermaid\\s*\\r?\\n([\\s\\S]*?)```",
         options: []
     )
 
@@ -69,7 +69,14 @@ enum MermaidCodeBlockNormalizer {
                ch.isNewline
             {
                 output.append("<br/>")
-                cursor = next
+                if String(ch) == "\r",
+                   next < diagram.endIndex,
+                   diagram[next] == "\n"
+                {
+                    cursor = diagram.index(after: next)
+                } else {
+                    cursor = next
+                }
                 continue
             }
 

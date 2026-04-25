@@ -173,6 +173,7 @@ struct MarkdownWebView: NSViewRepresentable {
         let syncScrollRequestVersion: Int
         let syncScrollRequest: MarkdownSyncPoint?
         let onSyncPointChanged: ((MarkdownSyncPoint) -> Void)?
+        let onWheelDelta: ((CGFloat) -> Void)?
         let onLayoutChanged: (() -> Void)?
         let onAnchorGeometryChanged: (([MarkdownPreviewAnchorGeometry]) -> Void)?
     }
@@ -186,6 +187,7 @@ struct MarkdownWebView: NSViewRepresentable {
     var showsVerticalScroller = true
     var hidesContentScrollbar = false
     var onSyncPointChanged: ((MarkdownSyncPoint) -> Void)?
+    var onWheelDelta: ((CGFloat) -> Void)?
     var onLayoutChanged: (() -> Void)?
     var onAnchorGeometryChanged: (([MarkdownPreviewAnchorGeometry]) -> Void)?
 
@@ -197,6 +199,7 @@ struct MarkdownWebView: NSViewRepresentable {
             syncScrollRequestVersion: syncScrollRequestVersion,
             syncScrollRequest: syncScrollRequest,
             onSyncPointChanged: onSyncPointChanged,
+            onWheelDelta: onWheelDelta,
             onLayoutChanged: onLayoutChanged,
             onAnchorGeometryChanged: onAnchorGeometryChanged
         )
@@ -269,6 +272,7 @@ struct MarkdownWebView: NSViewRepresentable {
         private var showsVerticalScroller = true
         private var hidesContentScrollbar = false
         private var onSyncPointChanged: ((MarkdownSyncPoint) -> Void)?
+        private var onWheelDelta: ((CGFloat) -> Void)?
         private var onLayoutChanged: (() -> Void)?
         private var onAnchorGeometryChanged: (([MarkdownPreviewAnchorGeometry]) -> Void)?
         private var isApplyingProgrammaticScroll = false
@@ -281,6 +285,7 @@ struct MarkdownWebView: NSViewRepresentable {
             showsVerticalScroller = configuration.showsVerticalScroller
             hidesContentScrollbar = configuration.hidesContentScrollbar
             onSyncPointChanged = configuration.onSyncPointChanged
+            onWheelDelta = configuration.onWheelDelta
             onLayoutChanged = configuration.onLayoutChanged
             onAnchorGeometryChanged = configuration.onAnchorGeometryChanged
         }
@@ -297,12 +302,16 @@ struct MarkdownWebView: NSViewRepresentable {
 
         func updateContentScrollbarVisibility(in webView: WKWebView) {
             let hideScrollbar = hidesContentScrollbar ? "true" : "false"
+            let linkedScroll = scrollSyncEnabled && hidesContentScrollbar ? "true" : "false"
             let script = """
             (() => {
                 const root = document.documentElement;
                 if (!root) return;
                 root.classList.toggle('muxy-hide-content-scrollbar', \(
                     hideScrollbar
+                ));
+                root.classList.toggle('muxy-linked-scroll', \(
+                    linkedScroll
                 ));
             })();
             """
@@ -553,6 +562,20 @@ struct MarkdownWebView: NSViewRepresentable {
             if message.name == MarkdownPreviewAnchorGeometryBridge.geometryHandlerName {
                 guard !isNavigationInFlight else { return }
                 handleAnchorGeometryMessage(message.body)
+                return
+            }
+
+            if message.name == MarkdownWebBridge.wheelHandlerName {
+                guard scrollSyncEnabled,
+                      !isNavigationInFlight,
+                      let payload = message.body as? [String: Any],
+                      let deltaYNumber = payload["deltaY"] as? NSNumber
+                else { return }
+
+                let deltaY = CGFloat(truncating: deltaYNumber)
+                DispatchQueue.main.async {
+                    self.onWheelDelta?(deltaY)
+                }
                 return
             }
 

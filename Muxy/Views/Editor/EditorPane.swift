@@ -144,6 +144,9 @@ struct EditorPane: View {
                         let output = state.markdownSyncCoordinator.previewDidScroll(point: point, totalLineCount: lineCount)
                         state.applyMarkdownSyncOutput(output)
                     },
+                    onWheelDelta: { deltaY in
+                        state.forwardLinkedMarkdownScroll(deltaY: deltaY)
+                    },
                     onLayoutChanged: {
                         let output = state.markdownSyncCoordinator.previewDidRelayout()
                         state.applyMarkdownSyncOutput(output)

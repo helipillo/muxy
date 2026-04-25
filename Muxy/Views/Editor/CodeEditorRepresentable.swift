@@ -290,8 +290,6 @@ struct CodeEditorView: NSViewRepresentable {
                 return
             }
             window.makeFirstResponder(textView)
-            textView.setSelectedRange(NSRange(location: 0, length: 0))
-            textView.scrollRangeToVisible(NSRange(location: 0, length: 0))
         }
     }
 

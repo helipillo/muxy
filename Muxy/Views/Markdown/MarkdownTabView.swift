@@ -24,7 +24,6 @@ private enum MarkdownWebBridge {
     static let scrollObserverScript = #"""
     (() => {
         const handler = window.webkit?.messageHandlers?.muxyMarkdownScroll;
-        const wheelHandler = window.webkit?.messageHandlers?.muxyMarkdownWheel;
         if (!handler) return;
 
         let attachedRoot = null;
@@ -72,10 +71,9 @@ private enum MarkdownWebBridge {
             }
 
             wheelListener = event => {
-                if (!wheelHandler) return;
                 if (!document.documentElement?.classList.contains('muxy-linked-scroll')) return;
-                wheelHandler.postMessage({ deltaY: event.deltaY });
                 event.preventDefault();
+                event.stopPropagation();
             };
 
             attachedRoot = root;

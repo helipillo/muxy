@@ -419,7 +419,6 @@ enum MarkdownRenderer {
                     } catch (_) {}
                 });
 
-                var _mermaidInitialized = false;
                 var _markedConfigured = false;
                 function decodeBase64UTF8(base64) {
                     try {
@@ -1115,14 +1114,11 @@ enum MarkdownRenderer {
                         try {
                             var mermaidReady = await ensureMermaidLoaded();
                             if (mermaidReady && typeof mermaid !== 'undefined') {
-                                if (!_mermaidInitialized) {
-                                    mermaid.initialize({
-                                        startOnLoad: false,
-                                        theme: 'dark',
-                                        themeVariables: \(mermaidThemeVariablesJSON)
-                                    });
-                                    _mermaidInitialized = true;
-                                }
+                                mermaid.initialize({
+                                    startOnLoad: false,
+                                    theme: 'base',
+                                    themeVariables: \(mermaidThemeVariablesJSON)
+                                });
                                 for (var id in diagramMap) {
                                     var el = document.getElementById(id);
                                     if (el) {

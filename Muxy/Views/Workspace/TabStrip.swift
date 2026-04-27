@@ -20,6 +20,8 @@ struct PaneTabStrip: View {
     var showDevelopmentBadge = false
     var openInIDEProjectPath: String?
     var openInIDEFilePath: String?
+    var openInIDELine: Int?
+    var openInIDEColumn: Int?
     let projectID: UUID
     let onSelectTab: (UUID) -> Void
     let onCreateTab: () -> Void
@@ -81,7 +83,12 @@ struct PaneTabStrip: View {
                     .help(shortcutTooltip("Split Down", for: .splitDown))
                 IconButton(symbol: "plus", accessibilityLabel: "New Tab") { onCreateTab() }
                     .help(shortcutTooltip("New Tab", for: .newTab))
-                OpenInIDEControl(projectPath: openInIDEProjectPath, filePath: openInIDEFilePath)
+                OpenInIDEControl(
+                    projectPath: openInIDEProjectPath,
+                    filePath: openInIDEFilePath,
+                    line: openInIDELine,
+                    column: openInIDEColumn
+                )
                 if showVCSButton {
                     FileDiffIconButton(action: onCreateVCSTab)
                         .help(shortcutTooltip("Source Control", for: .openVCSTab))

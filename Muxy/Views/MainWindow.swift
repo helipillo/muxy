@@ -328,6 +328,8 @@ struct MainWindow: View {
                 showDevelopmentBadge: AppEnvironment.isDevelopment,
                 openInIDEProjectPath: activeWorktreePath(for: project),
                 openInIDEFilePath: activeEditorFilePath,
+                openInIDELine: activeEditorCursorLine,
+                openInIDEColumn: activeEditorCursorColumn,
                 projectID: project.id,
                 onSelectTab: { tabID in
                     appState.dispatch(.selectTab(projectID: project.id, areaID: area.id, tabID: tabID))
@@ -387,7 +389,12 @@ struct MainWindow: View {
                 .overlay(alignment: .trailing) {
                     HStack(spacing: 0) {
                         if let project = activeProject {
-                            OpenInIDEControl(projectPath: activeWorktreePath(for: project), filePath: activeEditorFilePath)
+                            OpenInIDEControl(
+                                projectPath: activeWorktreePath(for: project),
+                                filePath: activeEditorFilePath,
+                                line: activeEditorCursorLine,
+                                column: activeEditorCursorColumn
+                            )
                         }
                         if AppEnvironment.isDevelopment {
                             devModeBadge
@@ -563,9 +570,21 @@ struct MainWindow: View {
         fileTreeStates[key] = FileTreeState(rootPath: path)
     }
 
-    private var activeEditorFilePath: String? {
+    private var activeEditorState: EditorTabState? {
         guard let project = activeProject else { return nil }
-        return appState.activeTab(for: project.id)?.content.editorState?.filePath
+        return appState.activeTab(for: project.id)?.content.editorState
+    }
+
+    private var activeEditorFilePath: String? {
+        activeEditorState?.filePath
+    }
+
+    private var activeEditorCursorLine: Int? {
+        activeEditorState?.cursorLine
+    }
+
+    private var activeEditorCursorColumn: Int? {
+        activeEditorState?.cursorColumn
     }
 
     private func syncFileTreeSelection(filePath: String?) {

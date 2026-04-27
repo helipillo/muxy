@@ -17,6 +17,12 @@ final class IDEIntegrationService: ObservableObject {
         }
     }
 
+    struct EditorLocation: Hashable {
+        let filePath: String
+        let line: Int
+        let column: Int
+    }
+
     struct AppMetadata: Hashable {
         let bundleIdentifier: String
         let displayName: String
@@ -87,13 +93,19 @@ final class IDEIntegrationService: ObservableObject {
     func openProject(
         at path: String,
         highlightingFileAt filePath: String? = nil,
+        line: Int? = nil,
+        column: Int? = nil,
         in ide: IDEApplication? = nil
     ) -> Bool {
         guard let app = ide ?? defaultIDE else { return false }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-a", app.appURL.path] + Self.openTargetArguments(projectPath: path, filePath: filePath)
+        process.arguments = Self.launchArguments(
+            for: app,
+            projectPath: path,
+            editorLocation: editorLocation(filePath: filePath, line: line, column: column)
+        )
 
         do {
             try process.run()
@@ -107,6 +119,23 @@ final class IDEIntegrationService: ObservableObject {
         return true
     }
 
+    static func launchArguments(
+        for ide: IDEApplication,
+        projectPath: String,
+        editorLocation: EditorLocation?
+    ) -> [String] {
+        switch launchStrategy(forBundleIdentifier: ide.bundleIdentifier) {
+        case .vscodeLike:
+            var args = ["-a", ide.appURL.path, "--args", projectPath]
+            if let editorLocation {
+                args += ["--goto", vscodeGotoTarget(for: editorLocation)]
+            }
+            return args
+        case .generic:
+            return ["-a", ide.appURL.path] + openTargetArguments(projectPath: projectPath, filePath: editorLocation?.filePath)
+        }
+    }
+
     static func openTargetArguments(projectPath: String, filePath: String?) -> [String] {
         var orderedPaths = [projectPath]
 
@@ -118,6 +147,12 @@ final class IDEIntegrationService: ObservableObject {
         }
 
         return orderedPaths
+    }
+
+    static func vscodeGotoTarget(for location: EditorLocation) -> String {
+        let safeLine = max(1, location.line)
+        let safeColumn = max(1, location.column)
+        return "\(location.filePath):\(safeLine):\(safeColumn)"
     }
 
     static func resolveDefaultIDE(
@@ -233,6 +268,27 @@ final class IDEIntegrationService: ObservableObject {
         return results
     }
 
+    private func editorLocation(filePath: String?, line: Int?, column: Int?) -> EditorLocation? {
+        guard let filePath, !filePath.isEmpty else { return nil }
+        return EditorLocation(
+            filePath: filePath,
+            line: max(1, line ?? 1),
+            column: max(1, column ?? 1)
+        )
+    }
+
+    private static func launchStrategy(forBundleIdentifier bundleIdentifier: String) -> LaunchStrategy {
+        if vscodeLikeBundleIdentifiers.contains(bundleIdentifier) {
+            return .vscodeLike
+        }
+        return .generic
+    }
+
+    private enum LaunchStrategy {
+        case generic
+        case vscodeLike
+    }
+
     private func dedupeKey(for app: IDEApplication) -> String {
         if !app.bundleIdentifier.isEmpty {
             return app.bundleIdentifier
@@ -245,6 +301,14 @@ final class IDEIntegrationService: ObservableObject {
     }
 
     private static let developerToolsCategory = "public.app-category.developer-tools"
+
+    private static let vscodeLikeBundleIdentifiers: Set<String> = [
+        "com.microsoft.VSCode",
+        "com.microsoft.VSCodeInsiders",
+        "com.todesktop.230313mzl4w4u92",
+        "com.exafunction.windsurf",
+        "com.vscodium",
+    ]
 
     private static let curatedBundleMetadata: [String: MatchMetadata] = [
         "com.microsoft.VSCode": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 10),

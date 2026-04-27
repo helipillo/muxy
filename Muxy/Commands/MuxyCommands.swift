@@ -27,9 +27,21 @@ struct MuxyCommands: Commands {
             ?? project.path
     }
 
-    private var activeEditorFilePath: String? {
+    private var activeEditorState: EditorTabState? {
         guard let project = activeProject else { return nil }
-        return appState.activeTab(for: project.id)?.content.editorState?.filePath
+        return appState.activeTab(for: project.id)?.content.editorState
+    }
+
+    private var activeEditorFilePath: String? {
+        activeEditorState?.filePath
+    }
+
+    private var activeEditorCursorLine: Int? {
+        activeEditorState?.cursorLine
+    }
+
+    private var activeEditorCursorColumn: Int? {
+        activeEditorState?.cursorColumn
     }
 
     private var shortcutDispatcher: ShortcutActionDispatcher {
@@ -106,9 +118,21 @@ struct MuxyCommands: Commands {
             .shortcut(for: .openProject, store: keyBindings)
 
             if let defaultIDE = ideService.defaultIDE {
-                Button("Open in \(defaultIDE.displayName)") {
+                Button {
                     guard let activeProjectPath else { return }
-                    _ = ideService.openProject(at: activeProjectPath, highlightingFileAt: activeEditorFilePath, in: defaultIDE)
+                    _ = ideService.openProject(
+                        at: activeProjectPath,
+                        highlightingFileAt: activeEditorFilePath,
+                        line: activeEditorCursorLine,
+                        column: activeEditorCursorColumn,
+                        in: defaultIDE
+                    )
+                } label: {
+                    Label {
+                        Text("Open in \(defaultIDE.displayName)")
+                    } icon: {
+                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName)
+                    }
                 }
                 .disabled(activeProjectPath == nil)
             }
@@ -119,9 +143,21 @@ struct MuxyCommands: Commands {
                         .disabled(true)
                 } else {
                     ForEach(ideService.installedApps) { ide in
-                        Button(ide.displayName) {
+                        Button {
                             guard let activeProjectPath else { return }
-                            _ = ideService.openProject(at: activeProjectPath, highlightingFileAt: activeEditorFilePath, in: ide)
+                            _ = ideService.openProject(
+                                at: activeProjectPath,
+                                highlightingFileAt: activeEditorFilePath,
+                                line: activeEditorCursorLine,
+                                column: activeEditorCursorColumn,
+                                in: ide
+                            )
+                        } label: {
+                            Label {
+                                Text(ide.displayName)
+                            } icon: {
+                                AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName)
+                            }
                         }
                     }
                 }

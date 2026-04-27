@@ -4,6 +4,8 @@ import SwiftUI
 struct OpenInIDEControl: View {
     let projectPath: String?
     let filePath: String?
+    let line: Int?
+    let column: Int?
     var compact = true
 
     @ObservedObject private var ideService = IDEIntegrationService.shared
@@ -14,7 +16,11 @@ struct OpenInIDEControl: View {
                 Button {
                     open(defaultIDE)
                 } label: {
-                    Label("Open in \(defaultIDE.displayName)", systemImage: defaultIDE.symbolName)
+                    Label {
+                        Text("Open in \(defaultIDE.displayName)")
+                    } icon: {
+                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName)
+                    }
                 }
             }
 
@@ -26,7 +32,11 @@ struct OpenInIDEControl: View {
                         open(ide)
                     } label: {
                         HStack {
-                            Label(ide.displayName, systemImage: ide.symbolName)
+                            Label {
+                                Text(ide.displayName)
+                            } icon: {
+                                AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName)
+                            }
                             if ide.bundleIdentifier == defaultIDE?.bundleIdentifier {
                                 Spacer()
                                 Text("Default")
@@ -71,14 +81,28 @@ struct OpenInIDEControl: View {
     @ViewBuilder
     private var label: some View {
         if compact {
-            Image(systemName: defaultIDE?.symbolName ?? "chevron.left.forwardslash.chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(MuxyTheme.fgMuted)
+            Group {
+                if let defaultIDE {
+                    AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 16)
+                } else {
+                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(MuxyTheme.fgMuted)
+                }
+            }
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
                 .accessibilityLabel(helpText)
         } else {
-            Label(defaultIDE.map { "Open in \($0.displayName)" } ?? "Open in IDE", systemImage: defaultIDE?.symbolName ?? "chevron.left.forwardslash.chevron.right")
+            Label {
+                Text(defaultIDE.map { "Open in \($0.displayName)" } ?? "Open in IDE")
+            } icon: {
+                if let defaultIDE {
+                    AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 16)
+                } else {
+                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                }
+            }
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgMuted)
                 .contentShape(Rectangle())
@@ -88,6 +112,12 @@ struct OpenInIDEControl: View {
 
     private func open(_ ide: IDEIntegrationService.IDEApplication) {
         guard let projectPath else { return }
-        _ = ideService.openProject(at: projectPath, highlightingFileAt: filePath, in: ide)
+        _ = ideService.openProject(
+            at: projectPath,
+            highlightingFileAt: filePath,
+            line: line,
+            column: column,
+            in: ide
+        )
     }
 }

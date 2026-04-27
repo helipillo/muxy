@@ -31,6 +31,66 @@ struct IDEIntegrationServiceTests {
         #expect(resolved?.bundleIdentifier == zed.bundleIdentifier)
     }
 
+    @Test("launchArguments uses vscode goto strategy when supported")
+    func launchArgumentsUsesVSCodeGotoStrategyWhenSupported() {
+        let ide = IDEIntegrationService.IDEApplication(
+            bundleIdentifier: "com.microsoft.VSCode",
+            displayName: "VS Code",
+            appURL: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"),
+            symbolName: "chevron.left.forwardslash.chevron.right",
+            rank: 10
+        )
+        let location = IDEIntegrationService.EditorLocation(
+            filePath: "/tmp/repo/Sources/App.swift",
+            line: 12,
+            column: 7
+        )
+
+        let arguments = IDEIntegrationService.launchArguments(
+            for: ide,
+            projectPath: "/tmp/repo",
+            editorLocation: location
+        )
+
+        #expect(arguments == [
+            "-a",
+            "/Applications/Visual Studio Code.app",
+            "--args",
+            "/tmp/repo",
+            "--goto",
+            "/tmp/repo/Sources/App.swift:12:7",
+        ])
+    }
+
+    @Test("launchArguments falls back to generic project and file opening")
+    func launchArgumentsFallsBackToGenericProjectAndFileOpening() {
+        let ide = IDEIntegrationService.IDEApplication(
+            bundleIdentifier: "com.jetbrains.PhpStorm",
+            displayName: "PhpStorm",
+            appURL: URL(fileURLWithPath: "/Applications/PhpStorm.app"),
+            symbolName: "chevron.left.forwardslash.chevron.right",
+            rank: 19
+        )
+        let location = IDEIntegrationService.EditorLocation(
+            filePath: "/tmp/repo/Sources/App.swift",
+            line: 12,
+            column: 7
+        )
+
+        let arguments = IDEIntegrationService.launchArguments(
+            for: ide,
+            projectPath: "/tmp/repo",
+            editorLocation: location
+        )
+
+        #expect(arguments == [
+            "-a",
+            "/Applications/PhpStorm.app",
+            "/tmp/repo",
+            "/tmp/repo/Sources/App.swift",
+        ])
+    }
+
     @Test("openTargetArguments includes project and focused file once")
     func openTargetArgumentsIncludesProjectAndFocusedFileOnce() {
         let arguments = IDEIntegrationService.openTargetArguments(

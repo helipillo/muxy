@@ -63,6 +63,14 @@ struct PaneTabStrip: View {
             .frame(height: 32)
 
             HStack(spacing: 0) {
+                if isWindowTitleBar {
+                    OpenInIDEControl(
+                        projectPath: openInIDEProjectPath,
+                        filePath: openInIDEFilePath,
+                        line: openInIDELine,
+                        column: openInIDEColumn
+                    )
+                }
                 if showDevelopmentBadge {
                     developmentBadge
                         .padding(.trailing, 6)
@@ -83,14 +91,6 @@ struct PaneTabStrip: View {
                     .help(shortcutTooltip("Split Down", for: .splitDown))
                 IconButton(symbol: "plus", accessibilityLabel: "New Tab") { onCreateTab() }
                     .help(shortcutTooltip("New Tab", for: .newTab))
-                if isWindowTitleBar {
-                    OpenInIDEControl(
-                        projectPath: openInIDEProjectPath,
-                        filePath: openInIDEFilePath,
-                        line: openInIDELine,
-                        column: openInIDEColumn
-                    )
-                }
                 if showVCSButton {
                     FileDiffIconButton(action: onCreateVCSTab)
                         .help(shortcutTooltip("Source Control", for: .openVCSTab))

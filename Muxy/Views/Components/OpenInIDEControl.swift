@@ -25,7 +25,7 @@ struct OpenInIDEControl: View {
             Button(action: openDefaultIDE) {
                 Group {
                     if let defaultIDE {
-                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 12)
+                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 14)
                     } else {
                         Image(systemName: "chevron.left.forwardslash.chevron.right")
                             .font(.system(size: 11, weight: .semibold))
@@ -62,7 +62,7 @@ struct OpenInIDEControl: View {
             Button(action: openDefaultIDE) {
                 HStack(spacing: 6) {
                     if let defaultIDE {
-                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 12)
+                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 14)
                     } else {
                         Image(systemName: "chevron.left.forwardslash.chevron.right")
                     }
@@ -107,7 +107,7 @@ struct OpenInIDEControl: View {
                     open(ide)
                 } label: {
                     HStack(spacing: 8) {
-                        AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 12)
+                        AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 10)
                         Text(ide.displayName)
                         if ide.bundleIdentifier == defaultIDE?.bundleIdentifier {
                             Spacer()

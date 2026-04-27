@@ -100,26 +100,25 @@ struct OpenInIDEControl: View {
     }
 
     private var menuPopoverContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if installedApps.isEmpty {
-                    Text("No supported IDEs found")
-                        .font(.system(size: 12))
-                        .foregroundStyle(MuxyTheme.fgMuted)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                } else {
-                    if !editorApps.isEmpty {
-                        menuSection(title: "Editors & IDEs", apps: editorApps)
-                    }
-                    if !otherToolApps.isEmpty {
-                        menuSection(title: "Other Tools", apps: otherToolApps)
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            if installedApps.isEmpty {
+                Text("No supported IDEs found")
+                    .font(.system(size: 12))
+                    .foregroundStyle(MuxyTheme.fgMuted)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+            } else {
+                if !editorApps.isEmpty {
+                    menuSection(title: "Editors & IDEs", apps: editorApps)
+                }
+                if !otherToolApps.isEmpty {
+                    menuSection(title: "Other Tools", apps: otherToolApps)
                 }
             }
-            .padding(.vertical, 4)
         }
-        .frame(width: menuPopoverWidth, height: min(CGFloat(max(installedApps.count, 1)) * 24 + 34, 260))
+        .padding(.vertical, 4)
+        .frame(width: menuPopoverWidth, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
         .background(MuxyTheme.bg)
     }
 
@@ -151,8 +150,8 @@ struct OpenInIDEControl: View {
         ]
 
         let contentWidth = (appWidths + sectionWidths).max() ?? 0
-        let paddedWidth = contentWidth + 34
-        return min(max(180, paddedWidth), 320)
+        let paddedWidth = contentWidth + 30
+        return min(paddedWidth, 320)
     }
 
     private func textWidth(_ text: String, font: NSFont) -> CGFloat {
@@ -181,7 +180,6 @@ struct OpenInIDEControl: View {
     private func menuButton(for ide: IDEIntegrationService.IDEApplication) -> some View {
         IDEMenuRow(
             ide: ide,
-            isDefault: ide.bundleIdentifier == defaultIDE?.bundleIdentifier,
             action: {
                 showingMenu = false
                 open(ide)
@@ -236,7 +234,6 @@ struct OpenInIDEControl: View {
 @MainActor
 private struct IDEMenuRow: View {
     let ide: IDEIntegrationService.IDEApplication
-    let isDefault: Bool
     let action: () -> Void
 
     @State private var hovered = false
@@ -247,9 +244,6 @@ private struct IDEMenuRow: View {
                 AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 14)
                 Text(ide.displayName)
                     .font(.system(size: 12))
-                if isDefault {
-                    Spacer(minLength: 0)
-                }
             }
             .foregroundStyle(MuxyTheme.fg)
             .padding(.horizontal, 9)

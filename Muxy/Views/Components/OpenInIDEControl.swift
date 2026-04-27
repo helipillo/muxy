@@ -150,8 +150,8 @@ struct OpenInIDEControl: View {
         ]
 
         let contentWidth = (appWidths + sectionWidths).max() ?? 0
-        let paddedWidth = contentWidth + 30
-        return min(paddedWidth, 320)
+        let paddedWidth = contentWidth + 22
+        return min(paddedWidth, 280)
     }
 
     private func textWidth(_ text: String, font: NSFont) -> CGFloat {

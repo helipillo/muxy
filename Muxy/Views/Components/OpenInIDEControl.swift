@@ -118,7 +118,7 @@ struct OpenInIDEControl: View {
             }
             .padding(.vertical, 6)
         }
-        .frame(width: 260, height: min(CGFloat(max(installedApps.count, 1)) * 24 + 40, 280))
+        .frame(width: 280, height: min(CGFloat(max(installedApps.count, 1)) * 24 + 40, 280))
         .background(MuxyTheme.bg)
     }
 

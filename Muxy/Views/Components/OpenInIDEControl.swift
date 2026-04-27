@@ -45,17 +45,20 @@ struct OpenInIDEControl: View {
             Menu {
                 menuContent
             } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(menuForeground)
-                    .frame(width: 14, height: 24)
-                    .contentShape(Rectangle())
-                    .background(hoveredMenu ? MuxyTheme.hover.opacity(1.0) : .clear, in: RoundedRectangle(cornerRadius: 5))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(hoveredMenu ? MuxyTheme.hover : .clear)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(menuForeground)
+                }
+                .frame(width: 14, height: 24)
+                .contentShape(Rectangle())
+                .onHover { hoveredMenu = $0 }
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .disabled(projectPath == nil)
-            .onHover { hoveredMenu = $0 }
             .help(menuHelpText)
         }
     }
@@ -87,17 +90,20 @@ struct OpenInIDEControl: View {
             Menu {
                 menuContent
             } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(menuForeground)
-                    .frame(width: 18, height: 24)
-                    .contentShape(Rectangle())
-                    .background(hoveredMenu ? MuxyTheme.hover.opacity(1.0) : .clear, in: RoundedRectangle(cornerRadius: 5))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(hoveredMenu ? MuxyTheme.hover : .clear)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(menuForeground)
+                }
+                .frame(width: 18, height: 24)
+                .contentShape(Rectangle())
+                .onHover { hoveredMenu = $0 }
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .disabled(projectPath == nil)
-            .onHover { hoveredMenu = $0 }
             .help(menuHelpText)
         }
     }

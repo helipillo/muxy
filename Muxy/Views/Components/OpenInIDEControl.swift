@@ -11,6 +11,7 @@ struct OpenInIDEControl: View {
     @ObservedObject private var ideService = IDEIntegrationService.shared
     @State private var hoveredPrimary = false
     @State private var hoveredMenu = false
+    @State private var showingMenu = false
 
     var body: some View {
         if compact {
@@ -42,24 +43,10 @@ struct OpenInIDEControl: View {
             .help(helpText)
             .accessibilityLabel(helpText)
 
-            Menu {
-                menuContent
-            } label: {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(hoveredMenu ? MuxyTheme.hover : .clear)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(menuForeground)
-                }
-                .frame(width: 14, height: 24)
-                .contentShape(Rectangle())
-                .onHover { hoveredMenu = $0 }
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .disabled(projectPath == nil)
-            .help(menuHelpText)
+            menuToggleButton(width: 14)
+        }
+        .popover(isPresented: $showingMenu, arrowEdge: .bottom) {
+            menuPopoverContent
         }
     }
 
@@ -87,47 +74,70 @@ struct OpenInIDEControl: View {
             .help(helpText)
             .accessibilityLabel(helpText)
 
-            Menu {
-                menuContent
-            } label: {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(hoveredMenu ? MuxyTheme.hover : .clear)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(menuForeground)
-                }
-                .frame(width: 18, height: 24)
-                .contentShape(Rectangle())
-                .onHover { hoveredMenu = $0 }
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .disabled(projectPath == nil)
-            .help(menuHelpText)
+            menuToggleButton(width: 18)
+        }
+        .popover(isPresented: $showingMenu, arrowEdge: .bottom) {
+            menuPopoverContent
         }
     }
 
-    @ViewBuilder
-    private var menuContent: some View {
-        if installedApps.isEmpty {
-            Button("No supported IDEs found") {}
-                .disabled(true)
-        } else {
-            if !editorApps.isEmpty {
-                Section("Editors & IDEs") {
-                    ForEach(editorApps) { ide in
-                        menuButton(for: ide)
+    private func menuToggleButton(width: CGFloat) -> some View {
+        Button {
+            guard projectPath != nil else { return }
+            showingMenu.toggle()
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(hoveredMenu ? MuxyTheme.hover : .clear)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(menuForeground)
+            }
+            .frame(width: width, height: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(projectPath == nil)
+        .onHover { hoveredMenu = $0 }
+        .help(menuHelpText)
+    }
+
+    private var menuPopoverContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if installedApps.isEmpty {
+                    Text("No supported IDEs found")
+                        .font(.system(size: 12))
+                        .foregroundStyle(MuxyTheme.fgMuted)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                } else {
+                    if !editorApps.isEmpty {
+                        menuSection(title: "Editors & IDEs", apps: editorApps)
+                    }
+                    if !otherToolApps.isEmpty {
+                        menuSection(title: "Other Tools", apps: otherToolApps)
                     }
                 }
             }
+            .padding(.vertical, 6)
+        }
+        .frame(width: 280, height: min(CGFloat(max(installedApps.count, 1)) * 28 + 44, 320))
+        .background(MuxyTheme.bg)
+    }
 
-            if !otherToolApps.isEmpty {
-                Section("Other Tools") {
-                    ForEach(otherToolApps) { ide in
-                        menuButton(for: ide)
-                    }
-                }
+    @ViewBuilder
+    private func menuSection(title: String, apps: [IDEIntegrationService.IDEApplication]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(MuxyTheme.fgMuted)
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+                .padding(.bottom, 2)
+
+            ForEach(apps) { ide in
+                menuButton(for: ide)
             }
         }
     }
@@ -150,20 +160,29 @@ struct OpenInIDEControl: View {
         return apps.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
-    @ViewBuilder
     private func menuButton(for ide: IDEIntegrationService.IDEApplication) -> some View {
         Button {
+            showingMenu = false
             open(ide)
         } label: {
             HStack(spacing: 8) {
                 AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 15)
                 Text(ide.displayName)
+                    .font(.system(size: 12))
                 if ide.bundleIdentifier == defaultIDE?.bundleIdentifier {
                     Spacer()
                     Text("Default")
+                        .font(.system(size: 11))
+                        .foregroundStyle(MuxyTheme.fgMuted)
                 }
             }
+            .foregroundStyle(MuxyTheme.fg)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 
     private var helpText: String {
@@ -190,7 +209,7 @@ struct OpenInIDEControl: View {
         if projectPath == nil {
             return MuxyTheme.fgMuted.opacity(0.45)
         }
-        return hoveredMenu ? MuxyTheme.fg : MuxyTheme.fgMuted
+        return hoveredMenu ? .white : MuxyTheme.fgMuted
     }
 
     private func openDefaultIDE() {

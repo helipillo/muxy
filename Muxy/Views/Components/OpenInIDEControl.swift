@@ -105,7 +105,7 @@ struct OpenInIDEControl: View {
                     .font(.system(size: 12))
                     .foregroundStyle(MuxyTheme.fgMuted)
                     .padding(.leading, 10)
-                    .padding(.trailing, 6)
+                    .padding(.trailing, 12)
                     .padding(.vertical, 8)
             } else {
                 if !editorApps.isEmpty {
@@ -128,7 +128,7 @@ struct OpenInIDEControl: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgMuted)
                 .padding(.leading, 9)
-                .padding(.trailing, 6)
+                .padding(.trailing, 12)
                 .padding(.top, 4)
                 .padding(.bottom, 1)
 
@@ -226,7 +226,7 @@ private struct IDEMenuRow: View {
             }
             .foregroundStyle(MuxyTheme.fg)
             .padding(.leading, 9)
-            .padding(.trailing, 6)
+            .padding(.trailing, 12)
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(hovered ? MuxyTheme.hover : .clear)

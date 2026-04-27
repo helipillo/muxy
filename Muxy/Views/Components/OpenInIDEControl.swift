@@ -118,19 +118,19 @@ struct OpenInIDEControl: View {
             }
             .padding(.vertical, 6)
         }
-        .frame(width: 280, height: min(CGFloat(max(installedApps.count, 1)) * 28 + 44, 320))
+        .frame(width: 260, height: min(CGFloat(max(installedApps.count, 1)) * 24 + 40, 280))
         .background(MuxyTheme.bg)
     }
 
     @ViewBuilder
     private func menuSection(title: String, apps: [IDEIntegrationService.IDEApplication]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgMuted)
-                .padding(.horizontal, 12)
-                .padding(.top, 6)
-                .padding(.bottom, 2)
+                .padding(.horizontal, 10)
+                .padding(.top, 5)
+                .padding(.bottom, 1)
 
             ForEach(apps) { ide in
                 menuButton(for: ide)
@@ -161,20 +161,14 @@ struct OpenInIDEControl: View {
             showingMenu = false
             open(ide)
         } label: {
-            HStack(spacing: 8) {
-                AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 15)
+            HStack(spacing: 7) {
+                AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 14)
                 Text(ide.displayName)
                     .font(.system(size: 12))
-                if ide.bundleIdentifier == defaultIDE?.bundleIdentifier {
-                    Spacer()
-                    Text("Default")
-                        .font(.system(size: 11))
-                        .foregroundStyle(MuxyTheme.fgMuted)
-                }
             }
             .foregroundStyle(MuxyTheme.fg)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }

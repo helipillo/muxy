@@ -153,11 +153,13 @@ public struct PairingResultDTO: Codable, Sendable {
     public let deviceName: String
     public let themeFg: UInt32?
     public let themeBg: UInt32?
-    public init(clientID: UUID, deviceName: String, themeFg: UInt32? = nil, themeBg: UInt32? = nil) {
+    public let themePalette: [UInt32]?
+    public init(clientID: UUID, deviceName: String, themeFg: UInt32? = nil, themeBg: UInt32? = nil, themePalette: [UInt32]? = nil) {
         self.clientID = clientID
         self.deviceName = deviceName
         self.themeFg = themeFg
         self.themeBg = themeBg
+        self.themePalette = themePalette
     }
 }
 
@@ -166,11 +168,13 @@ public struct DeviceInfoDTO: Codable, Sendable {
     public let deviceName: String
     public let themeFg: UInt32?
     public let themeBg: UInt32?
-    public init(clientID: UUID, deviceName: String, themeFg: UInt32? = nil, themeBg: UInt32? = nil) {
+    public let themePalette: [UInt32]?
+    public init(clientID: UUID, deviceName: String, themeFg: UInt32? = nil, themeBg: UInt32? = nil, themePalette: [UInt32]? = nil) {
         self.clientID = clientID
         self.deviceName = deviceName
         self.themeFg = themeFg
         self.themeBg = themeBg
+        self.themePalette = themePalette
     }
 }
 
@@ -216,9 +220,11 @@ public struct PaneOwnershipEventDTO: Codable, Sendable {
 public struct DeviceThemeEventDTO: Codable, Sendable {
     public let fg: UInt32
     public let bg: UInt32
-    public init(fg: UInt32, bg: UInt32) {
+    public let palette: [UInt32]?
+    public init(fg: UInt32, bg: UInt32, palette: [UInt32]? = nil) {
         self.fg = fg
         self.bg = bg
+        self.palette = palette
     }
 }
 
@@ -280,6 +286,12 @@ public struct TerminalCellsDTO: Codable, Sendable {
     public let defaultFg: UInt32
     public let defaultBg: UInt32
     public let cells: [TerminalCellDTO]
+    public let altScreen: Bool
+    public let cursorKeys: Bool
+    public let bracketedPaste: Bool
+    public let focusEvent: Bool
+    public let mouseEvent: UInt16
+    public let mouseFormat: UInt16
 
     public init(
         paneID: UUID,
@@ -290,7 +302,13 @@ public struct TerminalCellsDTO: Codable, Sendable {
         cursorVisible: Bool,
         defaultFg: UInt32,
         defaultBg: UInt32,
-        cells: [TerminalCellDTO]
+        cells: [TerminalCellDTO],
+        altScreen: Bool = false,
+        cursorKeys: Bool = false,
+        bracketedPaste: Bool = false,
+        focusEvent: Bool = false,
+        mouseEvent: UInt16 = 0,
+        mouseFormat: UInt16 = 0
     ) {
         self.paneID = paneID
         self.cols = cols
@@ -301,6 +319,12 @@ public struct TerminalCellsDTO: Codable, Sendable {
         self.defaultFg = defaultFg
         self.defaultBg = defaultBg
         self.cells = cells
+        self.altScreen = altScreen
+        self.cursorKeys = cursorKeys
+        self.bracketedPaste = bracketedPaste
+        self.focusEvent = focusEvent
+        self.mouseEvent = mouseEvent
+        self.mouseFormat = mouseFormat
     }
 }
 

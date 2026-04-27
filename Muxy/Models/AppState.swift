@@ -33,7 +33,7 @@ final class AppState {
         case createTab(projectID: UUID, areaID: UUID?)
         case createTabInDirectory(projectID: UUID, areaID: UUID?, directory: String)
         case createVCSTab(projectID: UUID, areaID: UUID?)
-        case createEditorTab(projectID: UUID, areaID: UUID?, filePath: String)
+        case createEditorTab(projectID: UUID, areaID: UUID?, filePath: String, suppressInitialFocus: Bool)
         case createExternalEditorTab(projectID: UUID, areaID: UUID?, filePath: String, command: String)
         case createDiffViewerTab(projectID: UUID, areaID: UUID?, request: DiffViewerRequest)
         case closeTab(projectID: UUID, areaID: UUID, tabID: UUID)
@@ -210,7 +210,7 @@ final class AppState {
         dispatch(.createVCSTab(projectID: projectID, areaID: nil))
     }
 
-    func openFile(_ filePath: String, projectID: UUID) {
+    func openFile(_ filePath: String, projectID: UUID, preserveFocus: Bool = false) {
         let settings = EditorSettings.shared
         if settings.defaultEditor == .terminalCommand {
             let command = settings.externalEditorCommand.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -225,7 +225,7 @@ final class AppState {
                 return
             }
         }
-        dispatch(.createEditorTab(projectID: projectID, areaID: nil, filePath: filePath))
+        dispatch(.createEditorTab(projectID: projectID, areaID: nil, filePath: filePath, suppressInitialFocus: preserveFocus))
     }
 
     func handleFileMoved(from oldPath: String, to newPath: String) {

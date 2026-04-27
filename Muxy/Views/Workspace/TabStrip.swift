@@ -81,10 +81,6 @@ struct PaneTabStrip: View {
                     }
                     .padding(.trailing, 4)
                 }
-                IconButton(symbol: "magnifyingglass", size: 12, accessibilityLabel: "Quick Open") {
-                    NotificationCenter.default.post(name: .quickOpen, object: nil)
-                }
-                .help(shortcutTooltip("Quick Open", for: .quickOpen))
                 IconButton(symbol: "square.split.2x1", accessibilityLabel: "Split Right") { onSplit(.horizontal) }
                     .help(shortcutTooltip("Split Right", for: .splitRight))
                 IconButton(symbol: "square.split.1x2", accessibilityLabel: "Split Down") { onSplit(.vertical) }
@@ -92,14 +88,16 @@ struct PaneTabStrip: View {
                 IconButton(symbol: "plus", accessibilityLabel: "New Tab") { onCreateTab() }
                     .help(shortcutTooltip("New Tab", for: .newTab))
                 if showVCSButton {
+                    IconButton(symbol: "doc.text", size: 12, accessibilityLabel: "Quick Open") {
+                        NotificationCenter.default.post(name: .quickOpen, object: nil)
+                    }
+                    .help(shortcutTooltip("Quick Open", for: .quickOpen))
                     FileDiffIconButton(action: onCreateVCSTab)
                         .help(shortcutTooltip("Source Control", for: .openVCSTab))
-                    if VCSDisplayMode.current == .attached {
-                        FileTreeIconButton {
-                            NotificationCenter.default.post(name: .toggleFileTree, object: nil)
-                        }
-                        .help(shortcutTooltip("File Tree", for: .toggleFileTree))
+                    FileTreeIconButton {
+                        NotificationCenter.default.post(name: .toggleFileTree, object: nil)
                     }
+                    .help(shortcutTooltip("File Tree", for: .toggleFileTree))
                 }
             }
             .padding(.trailing, 4)
@@ -148,7 +146,7 @@ struct PaneTabStrip: View {
                     }
                 }
                 .gesture(
-                    DragGesture(minimumDistance: 4, coordinateSpace: .named(DragCoordinateSpace.mainWindow))
+                    DragGesture(minimumDistance: 0, coordinateSpace: .named(DragCoordinateSpace.mainWindow))
                         .onChanged { value in
                             handleDragChanged(
                                 tab: tab,
@@ -156,14 +154,14 @@ struct PaneTabStrip: View {
                                 dragStartGlobalLocation: value.startLocation
                             )
                         }
-                        .onEnded { _ in
-                            handleDragEnded()
+                        .onEnded { value in
+                            handleDragEnded(
+                                tab: tab,
+                                globalLocation: value.location,
+                                dragStartGlobalLocation: value.startLocation
+                            )
                         }
                 )
-                .onTapGesture {
-                    guard dragState.draggedID == nil else { return }
-                    onSelectTab(tab.id)
-                }
             }
         }
     }
@@ -176,12 +174,24 @@ struct PaneTabStrip: View {
         DevelopmentBadge()
     }
 
+    private static let dragActivationDistance: CGFloat = 4
+
     private func handleDragChanged(
         tab: TabSnapshot,
         globalLocation: CGPoint,
         dragStartGlobalLocation: CGPoint
     ) {
+        if !dragState.didSelect {
+            dragState.didSelect = true
+            onSelectTab(tab.id)
+        }
+
+        let dx = globalLocation.x - dragStartGlobalLocation.x
+        let dy = globalLocation.y - dragStartGlobalLocation.y
+        let distance = (dx * dx + dy * dy).squareRoot()
+
         if dragState.draggedID == nil {
+            guard distance >= Self.dragActivationDistance else { return }
             dragState.draggedID = tab.id
             dragState.lastReorderTargetID = nil
         }
@@ -191,9 +201,7 @@ struct PaneTabStrip: View {
             return
         }
 
-        let verticalEscape = abs(globalLocation.y - dragStartGlobalLocation.y) > 24
-
-        if verticalEscape, !tab.isPinned {
+        if abs(dy) > 24, !tab.isPinned {
             dragState.isInSplitMode = true
             dragCoordinator.beginDrag(tabID: tab.id, sourceAreaID: areaID, projectID: projectID)
             dragCoordinator.updatePosition(globalLocation)
@@ -203,7 +211,14 @@ struct PaneTabStrip: View {
         reorderIfNeeded(at: globalLocation)
     }
 
-    private func handleDragEnded() {
+    private func handleDragEnded(
+        tab: TabSnapshot,
+        globalLocation: CGPoint,
+        dragStartGlobalLocation: CGPoint
+    ) {
+        if !dragState.didSelect {
+            onSelectTab(tab.id)
+        }
         if dragState.isInSplitMode {
             if let result = dragCoordinator.endDrag() {
                 onDropAction(result)
@@ -214,6 +229,7 @@ struct PaneTabStrip: View {
             dragState.isInSplitMode = false
             dragState.frames = [:]
             dragState.lastReorderTargetID = nil
+            dragState.didSelect = false
         }
     }
 
@@ -249,6 +265,7 @@ private struct TabDragState {
     var frames: [UUID: CGRect] = [:]
     var isInSplitMode = false
     var lastReorderTargetID: UUID?
+    var didSelect = false
 }
 
 private typealias TabFramePreferenceKey = UUIDFramePreferenceKey<TabFrameTag>

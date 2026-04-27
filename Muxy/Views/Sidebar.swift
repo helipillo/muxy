@@ -242,6 +242,7 @@ struct SidebarFooter: View {
     @AppStorage(AIUsageSettingsStore.usageEnabledKey) private var usageEnabled = false
     @AppStorage(AIUsageSettingsStore.usageDisplayModeKey) private var usageDisplayModeRaw = AIUsageSettingsStore.defaultUsageDisplayMode
         .rawValue
+    @AppStorage(AIUsageSettingsStore.sidebarPreviewProviderIDKey) private var pinnedPreviewProviderID: String = ""
     @State private var showThemePicker = false
     @State private var showNotifications = false
     @State private var showAIUsagePopover = false
@@ -305,11 +306,13 @@ struct SidebarFooter: View {
     }
 
     private var previewProviderDisplay: (percent: Int, iconName: String)? {
-        guard let snapshot = usageService.previewProviderSnapshot,
-              case .available = snapshot.state
+        guard let selection = usageService.previewSelection(pinnedRawValue: pinnedPreviewProviderID),
+              case .available = selection.snapshot.state
         else { return nil }
 
-        let usedPercent = max(0, min(100, snapshot.rows.compactMap(\.percent).max() ?? 0))
+        let snapshot = selection.snapshot
+        let rowPercent = selection.row?.percent
+        let usedPercent = max(0, min(100, rowPercent ?? snapshot.rows.compactMap(\.percent).max() ?? 0))
         let displayPercent: Double = switch usageDisplayMode {
         case .used:
             usedPercent

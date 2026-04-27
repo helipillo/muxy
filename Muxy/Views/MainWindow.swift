@@ -133,7 +133,7 @@ struct MainWindow: View {
                         VCSTabView(state: state, focused: false, onFocus: {})
                             .frame(width: vcsPanelWidth)
                     }
-                } else if fileTreePanelVisible, VCSDisplayMode.current == .attached, let treeState = activeFileTreeState {
+                } else if fileTreePanelVisible, let treeState = activeFileTreeState {
                     HStack(spacing: 0) {
                         sidePanelResizeHandle { delta in
                             let next = fileTreePanelWidth - Double(delta)
@@ -146,7 +146,7 @@ struct MainWindow: View {
                             state: treeState,
                             onOpenFile: { filePath in
                                 guard let projectID = appState.activeProjectID else { return }
-                                appState.openFile(filePath, projectID: projectID)
+                                appState.openFile(filePath, projectID: projectID, preserveFocus: true)
                             },
                             onOpenTerminal: { directory in
                                 guard let projectID = appState.activeProjectID else { return }
@@ -407,15 +407,17 @@ struct MainWindow: View {
                             .padding(.trailing, 4)
                         }
                         if let project = activeProject, activeProjectHasSplitWorkspace {
+                            IconButton(symbol: "doc.text", size: 12, accessibilityLabel: "Quick Open") {
+                                NotificationCenter.default.post(name: .quickOpen, object: nil)
+                            }
+                            .help("Quick Open (\(KeyBindingStore.shared.combo(for: .quickOpen).displayString))")
                             FileDiffIconButton {
                                 openVCS(for: project)
                             }
-                            if VCSDisplayMode.current == .attached {
-                                FileTreeIconButton {
-                                    NotificationCenter.default.post(name: .toggleFileTree, object: nil)
-                                }
-                                .help("File Tree (\(KeyBindingStore.shared.combo(for: .toggleFileTree).displayString))")
+                            FileTreeIconButton {
+                                NotificationCenter.default.post(name: .toggleFileTree, object: nil)
                             }
+                            .help("File Tree (\(KeyBindingStore.shared.combo(for: .toggleFileTree).displayString))")
                         }
                     }
                     .padding(.trailing, 4)
@@ -622,10 +624,11 @@ struct MainWindow: View {
     }
 
     private func toggleFileTreePanel() {
-        guard VCSDisplayMode.current == .attached,
-              let project = activeProject
-        else {
-            fileTreePanelVisible = false
+        guard let project = activeProject else {
+            if fileTreePanelVisible {
+                fileTreePanelVisible = false
+                NotificationCenter.default.post(name: .refocusActiveTerminal, object: nil)
+            }
             return
         }
 
@@ -634,6 +637,8 @@ struct MainWindow: View {
         fileTreePanelVisible = isShowing
         if isShowing {
             vcsPanelVisible = false
+        } else {
+            NotificationCenter.default.post(name: .refocusActiveTerminal, object: nil)
         }
     }
 

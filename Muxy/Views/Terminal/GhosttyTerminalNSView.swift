@@ -14,6 +14,11 @@ final class GhosttyTerminalNSView: NSView {
     var onSearchEnd: (() -> Void)?
     var onSearchTotal: ((Int?) -> Void)?
     var onSearchSelected: ((Int?) -> Void)?
+    var onCmdClickFile: ((String) -> Void)?
+    var resolveCmdHoverFile: ((String) -> Bool)?
+    var onOpenURL: ((URL) -> Bool)?
+    private var isShowingHandCursor = false
+    var hasOSC8LinkUnderCursor: Bool = false
     var isFocused: Bool = false
     var overlayActive: Bool = false
 
@@ -37,7 +42,7 @@ final class GhosttyTerminalNSView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         setupTrackingArea()
-        registerForDraggedTypes([.fileURL])
+        registerForDraggedTypes([.fileURL, .string])
         setAccessibilityRole(.textArea)
         setAccessibilityRoleDescription("Terminal")
         let directoryName = URL(fileURLWithPath: workingDirectory).lastPathComponent
@@ -153,6 +158,10 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     func tearDown() {
+        setHandCursor(false)
+        onOpenURL = nil
+        onCmdClickFile = nil
+        resolveCmdHoverFile = nil
         onTitleChange = nil
         onFocus = nil
         onProcessExit = nil
@@ -382,7 +391,8 @@ final class GhosttyTerminalNSView: NSView {
         currentKeyEvent = event
         keyTextAccumulator = []
         commandSelectorCalled = false
-        interpretKeyEvents([event])
+        let interpretEvent = translatedOptionAsAlt(for: event) ? eventStrippingOption(event) : event
+        interpretKeyEvents([interpretEvent])
         currentKeyEvent = nil
 
         syncPreedit(clearIfNeeded: hadMarkedText)
@@ -438,6 +448,7 @@ final class GhosttyTerminalNSView: NSView {
         var keyEvent = buildKeyEvent(from: event, action: isFlagPress(event) ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE)
         keyEvent.text = nil
         _ = ghostty_surface_key(surface, keyEvent)
+        updateCmdHoverCursor(modifierFlags: event.modifierFlags)
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -448,6 +459,11 @@ final class GhosttyTerminalNSView: NSView {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let hasActionModifier = flags.contains(.command) || flags.contains(.control) || flags.contains(.option)
         guard hasActionModifier else { return false }
+
+        if isPasteShortcut(event, flags: flags), pasteboardHasImage() {
+            sendRemoteBytes(Data([0x16]))
+            return true
+        }
 
         var keyEvent = buildKeyEvent(from: event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
         keyEvent.text = nil
@@ -475,7 +491,21 @@ final class GhosttyTerminalNSView: NSView {
         }
         let pt = mousePoint(from: event)
         ghostty_surface_mouse_pos(surface, pt.x, pt.y, modsFromEvent(event))
+        if event.modifierFlags.contains(.command), !hasOSC8LinkUnderCursor, let word = readWordUnderMouse() {
+            onCmdClickFile?(word)
+            return
+        }
         _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, modsFromEvent(event))
+    }
+
+    private func readWordUnderMouse() -> String? {
+        guard let surface else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_quicklook_word(surface, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let value = extractString(from: text) else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -501,6 +531,34 @@ final class GhosttyTerminalNSView: NSView {
         guard let surface else { return }
         let pt = mousePoint(from: event)
         ghostty_surface_mouse_pos(surface, pt.x, pt.y, modsFromEvent(event))
+        updateCmdHoverCursor(modifierFlags: event.modifierFlags)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        setHandCursor(false)
+    }
+
+    private func updateCmdHoverCursor(modifierFlags: NSEvent.ModifierFlags) {
+        guard modifierFlags.contains(.command), !hasOSC8LinkUnderCursor else {
+            setHandCursor(false)
+            return
+        }
+        guard let word = readWordUnderMouse(), resolveCmdHoverFile?(word) == true else {
+            setHandCursor(false)
+            return
+        }
+        setHandCursor(true)
+    }
+
+    private func setHandCursor(_ on: Bool) {
+        guard on != isShowingHandCursor else { return }
+        isShowingHandCursor = on
+        if on {
+            NSCursor.pointingHand.push()
+        } else {
+            NSCursor.pop()
+        }
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -551,8 +609,23 @@ final class GhosttyTerminalNSView: NSView {
     @objc
     private func handleContextPaste(_: Any?) {
         window?.makeFirstResponder(self)
+        if pasteboardHasImage() {
+            sendRemoteBytes(Data([0x16]))
+            return
+        }
         guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { return }
         insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
+
+    private func isPasteShortcut(_ event: NSEvent, flags: NSEvent.ModifierFlags) -> Bool {
+        guard flags.contains(.command), !flags.contains(.control), !flags.contains(.option) else { return false }
+        return event.keyCode == 9
+    }
+
+    private func pasteboardHasImage() -> Bool {
+        let pb = NSPasteboard.general
+        if pb.string(forType: .string) != nil { return false }
+        return pb.canReadObject(forClasses: [NSImage.self], options: nil)
     }
 
     @objc
@@ -586,7 +659,14 @@ final class GhosttyTerminalNSView: NSView {
     private func buildKeyEvent(from event: NSEvent, action: ghostty_input_action_e) -> ghostty_input_key_s {
         var keyEvent = ghostty_input_key_s()
         keyEvent.action = action
-        keyEvent.keycode = UInt32(event.keyCode)
+
+        let normalized = KeyCombo.normalized(key: event.charactersIgnoringModifiers ?? "", keyCode: event.keyCode)
+        if let mappedCode = KeyCombo.keyCode(for: normalized) {
+            keyEvent.keycode = UInt32(mappedCode)
+        } else {
+            keyEvent.keycode = UInt32(event.keyCode)
+        }
+
         keyEvent.mods = modsFromEvent(event)
         keyEvent.consumed_mods = GHOSTTY_MODS_NONE
         keyEvent.composing = false
@@ -602,15 +682,53 @@ final class GhosttyTerminalNSView: NSView {
         return ghostty_input_mods_e(rawValue: mods)
     }
 
+    private enum RightModifierMask {
+        static let shift: UInt = 0x04
+        static let control: UInt = 0x2000
+        static let option: UInt = 0x40
+        static let command: UInt = 0x10
+    }
+
     private func modsFromEvent(_ event: NSEvent) -> ghostty_input_mods_e {
         var mods = GHOSTTY_MODS_NONE.rawValue
         let flags = event.modifierFlags
+        let raw = flags.rawValue
         if flags.contains(.shift) { mods |= GHOSTTY_MODS_SHIFT.rawValue }
         if flags.contains(.control) { mods |= GHOSTTY_MODS_CTRL.rawValue }
         if flags.contains(.option) { mods |= GHOSTTY_MODS_ALT.rawValue }
         if flags.contains(.command) { mods |= GHOSTTY_MODS_SUPER.rawValue }
         if flags.contains(.capsLock) { mods |= GHOSTTY_MODS_CAPS.rawValue }
+        if raw & RightModifierMask.shift != 0 { mods |= GHOSTTY_MODS_SHIFT_RIGHT.rawValue }
+        if raw & RightModifierMask.control != 0 { mods |= GHOSTTY_MODS_CTRL_RIGHT.rawValue }
+        if raw & RightModifierMask.option != 0 { mods |= GHOSTTY_MODS_ALT_RIGHT.rawValue }
+        if raw & RightModifierMask.command != 0 { mods |= GHOSTTY_MODS_SUPER_RIGHT.rawValue }
         return ghostty_input_mods_e(rawValue: mods)
+    }
+
+    private func translatedOptionAsAlt(for event: NSEvent) -> Bool {
+        guard let surface else { return false }
+        let flags = event.modifierFlags
+        guard flags.contains(.option) else { return false }
+        let original = modsFromEvent(event)
+        let translated = ghostty_surface_key_translation_mods(surface, original)
+        return translated.rawValue & GHOSTTY_MODS_ALT.rawValue == 0
+    }
+
+    private func eventStrippingOption(_ event: NSEvent) -> NSEvent {
+        let stripped = event.modifierFlags.subtracting(.option)
+        let synthetic = NSEvent.keyEvent(
+            with: event.type,
+            location: event.locationInWindow,
+            modifierFlags: stripped,
+            timestamp: event.timestamp,
+            windowNumber: event.windowNumber,
+            context: nil,
+            characters: event.charactersIgnoringModifiers ?? "",
+            charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
+            isARepeat: event.isARepeat,
+            keyCode: event.keyCode
+        )
+        return synthetic ?? event
     }
 
     private func isFlagPress(_ event: NSEvent) -> Bool {
@@ -650,6 +768,13 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     private func shortcutText(from event: NSEvent) -> String {
+        let normalized = KeyCombo.normalized(key: event.charactersIgnoringModifiers ?? "", keyCode: event.keyCode)
+        if normalized.unicodeScalars.count == 1,
+           let scalar = normalized.unicodeScalars.first,
+           scalar.isASCII, scalar.value >= 32, scalar.value <= 126
+        {
+            return normalized
+        }
         if let scalar = KeyCombo.scalar(for: event.keyCode) {
             return String(scalar)
         }
@@ -657,6 +782,10 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     private func unshiftedCodepoint(from event: NSEvent) -> UInt32 {
+        let normalized = KeyCombo.normalized(key: event.charactersIgnoringModifiers ?? "", keyCode: event.keyCode)
+        if let scalar = normalized.unicodeScalars.first, normalized.unicodeScalars.count == 1 {
+            return scalar.value
+        }
         if let scalar = KeyCombo.scalar(for: event.keyCode) {
             return scalar.value
         }
@@ -754,19 +883,25 @@ final class GhosttyTerminalNSView: NSView {
 
 extension GhosttyTerminalNSView {
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        guard sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self]) else { return [] }
-        return .copy
+        droppedPaths(from: sender).isEmpty ? [] : .copy
+    }
+
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        droppedPaths(from: sender).isEmpty ? [] : .copy
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL],
-              !urls.isEmpty
-        else { return false }
-
-        let paths = urls.map { ShellEscaper.escape($0.path) }
-        let text = paths.joined(separator: " ")
+        let paths = droppedPaths(from: sender)
+        guard !paths.isEmpty else { return false }
+        let text = paths.map { ShellEscaper.escape($0) }.joined(separator: " ")
         insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
         return true
+    }
+
+    private func droppedPaths(from sender: any NSDraggingInfo) -> [String] {
+        let pasteboard = sender.draggingPasteboard
+        let urls = (pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL]) ?? []
+        return DroppedPathsParser.parse(fileURLs: urls, plainString: pasteboard.string(forType: .string))
     }
 }
 

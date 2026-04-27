@@ -94,6 +94,7 @@ enum AIUsageSettingsStore {
     static let usageDisplayModeKey = "muxy.usage.displayMode"
     static let usageEnabledKey = "muxy.usage.enabled"
     static let showSecondaryLimitsKey = "muxy.usage.showSecondaryLimits"
+    static let sidebarPreviewProviderIDKey = "muxy.usage.sidebarPreviewProviderID"
 
     static let defaultAutoRefreshInterval: AIUsageAutoRefreshInterval = .fiveMinutes
     static let defaultUsageDisplayMode: AIUsageDisplayMode = .used
@@ -157,6 +158,59 @@ enum AIUsageSettingsStore {
 
     static func setShowSecondaryLimits(_ show: Bool, defaults: UserDefaults = .standard) {
         defaults.set(show, forKey: showSecondaryLimitsKey)
+    }
+
+    static func sidebarPreviewProviderID(defaults: UserDefaults = .standard) -> String? {
+        guard let pin = sidebarPreviewPin(defaults: defaults) else { return nil }
+        return pin.providerID
+    }
+
+    static func sidebarPreviewPin(defaults: UserDefaults = .standard) -> AISidebarPreviewPin? {
+        guard let raw = defaults.string(forKey: sidebarPreviewProviderIDKey) else { return nil }
+        return AISidebarPreviewPin(rawValue: raw)
+    }
+
+    static func setSidebarPreviewPin(_ pin: AISidebarPreviewPin?, defaults: UserDefaults = .standard) {
+        if let pin {
+            defaults.set(pin.encoded, forKey: sidebarPreviewProviderIDKey)
+        } else {
+            defaults.removeObject(forKey: sidebarPreviewProviderIDKey)
+        }
+    }
+
+    static func isSidebarPinned(providerID: String, rowLabel: String?, pinnedRawValue: String) -> Bool {
+        guard let pin = AISidebarPreviewPin(rawValue: pinnedRawValue) else { return false }
+        guard pin.providerID == canonicalAIUsageProviderID(providerID) else { return false }
+        return pin.rowLabel == rowLabel
+    }
+}
+
+struct AISidebarPreviewPin: Equatable {
+    let providerID: String
+    let rowLabel: String?
+
+    init(providerID: String, rowLabel: String?) {
+        self.providerID = canonicalAIUsageProviderID(providerID)
+        self.rowLabel = rowLabel
+    }
+
+    init?(rawValue: String) {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let separatorRange = trimmed.range(of: "::") {
+            let provider = String(trimmed[..<separatorRange.lowerBound])
+            let label = String(trimmed[separatorRange.upperBound...])
+            self.init(providerID: provider, rowLabel: label.isEmpty ? nil : label)
+        } else {
+            self.init(providerID: trimmed, rowLabel: nil)
+        }
+    }
+
+    var encoded: String {
+        if let rowLabel {
+            return "\(providerID)::\(rowLabel)"
+        }
+        return providerID
     }
 }
 

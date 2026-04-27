@@ -174,6 +174,7 @@ Muxy/
       FileTreeCommands.swift  Orchestrates create/rename/delete/cut/copy/paste/drop
     VCS/
       VCSTabView.swift        Source control tab (commit, stage, diff, branch) + PRPill + PRPopover
+      PullRequestsListView.swift  Pull Requests section: list, search, state filter, manual + auto sync
       BranchPicker.swift      Branch selection dropdown with filter and right-click delete
       UnifiedDiffView.swift   Unified diff rendering
       SplitDiffView.swift     Side-by-side diff rendering
@@ -343,7 +344,7 @@ The VCS tab is organized top-to-bottom as:
 
 1. **Header** — worktree trigger, branch picker, `PRPill`, settings, refresh.
 2. **Commit area** — commit message field + three first-class buttons: `Commit`, `Pull` (with `↓N` badge when behind), `Push` (with `↑N` badge when ahead). Commit hotkey is `⌘↵`.
-3. **Sections** — Staged / Changes / History resizable split.
+3. **Sections** — Staged / Changes / History / Pull Requests resizable split.
 
 Pull request management lives entirely in the header via `PRPill`, not in the commit area. `PRPill` renders one of the states from `VCSTabState.PRLaunchState`:
 
@@ -363,6 +364,10 @@ Pull request management lives entirely in the header via `PRPill`, not in the co
 5. **Draft** — checkbox that adds `--draft` to `gh pr create`.
 
 On submit, `performPRFlow` runs: optional branch create+switch → optional stage (all if include=all, staged-only otherwise) → commit with title if anything is staged → `git push -u origin <branch>` → `gh pr create`. No rollback on partial failure — errors surface to the sheet with a clear message so the user can retry manually from wherever the flow stopped. Ahead/behind counts are populated by `GitRepositoryService.aheadBehind` during refresh and drive the push/pull badges in the commit area.
+
+### Pull Requests Section
+
+The Pull Requests section is independent from the rest of VCS data and never auto-fetches with the file/branch refresh. It exposes search, a state filter (Open / Closed / Merged / All), a manual sync button, and an auto-sync interval menu (Off / 5m / 15m / 30m / 1h) persisted per-repo in `UserDefaults` under `vcs.prAutoSyncMinutes.<repoPath>`. `VCSTabState.loadPullRequests` calls `GitRepositoryService.listPullRequests` which shells out to `gh pr list --json …`. Selecting a PR row triggers `gh pr checkout <number>` via `checkoutPullRequest`; if the working tree is dirty, `VCSTabView` first presents an NSAlert confirmation. After checkout, the tab refreshes branches, files, and PR info.
 
 ## Navigation History
 
@@ -395,6 +400,48 @@ buttons (buttons 3/4), and horizontal swipe gestures (Magic Mouse
 window's shortcut interceptor installs a local `addLocalMonitorForEvents`
 handler for `[.otherMouseDown, .swipe]`, gated on the monitored window
 being key and identified as a Muxy main window.
+
+## CLI / URL Scheme Entry Points
+
+External callers can open a project in Muxy through three coordinated paths,
+all funneled into a single `AppDelegate.handleOpenProjectPath(_:)` choke point
+so persistence, dedupe, and activation behave consistently.
+
+- **`muxy` shell wrapper** (`Muxy/Resources/scripts/muxy-cli`, installed to
+  `/usr/local/bin/muxy` via `CLIAccessor.installCLI`) — resolves the argument to
+  an absolute directory and tries, in order via `||` chaining: open the
+  `muxy://open?path=<percent-encoded>` URL, fall back to `open -b com.muxy.app`
+  Apple Events, and finally pipe `open-project|<path>` to the Unix socket. A
+  small `python3`/`python` percent-encoder shells out without taking a
+  dependency on `jq`.
+- **`muxy://` URL scheme** — handled by `AppDelegate.application(_:open:)`.
+  `AppDelegate.resolveProjectPath(from:)` parses with `URLComponents`,
+  prefers a `path` query item, falls back to `host + path`, percent-decodes,
+  and standardizes via `URL(fileURLWithPath:).standardizedFileURL.path`. File
+  URLs are accepted directly. Foreign schemes are rejected.
+- **Launch arguments** — `applicationDidFinishLaunching` reads
+  `CommandLine.arguments[1]` only when the candidate begins with `/` or `~` and
+  resolves to an existing directory, so Xcode/test runner flags do not get
+  treated as project paths.
+- **Notification socket** — `NotificationSocketServer` accepts an
+  `open-project|<path>` line in addition to its notification format. It
+  validates the path is an existing directory and dispatches via an injected
+  `openProjectHandler` closure (wired in `MainWindow.onAppear`). No global
+  app-state references are read from inside the socket handler.
+
+`AppDelegate` holds an `openProjectFromPath` closure plus a `pendingOpenPaths`
+queue. URL events that arrive before `MainWindow.onAppear` wires the closure
+are buffered and replayed via `flushPendingOpens()` once the app state is
+ready. `CLIAccessor.openProjectFromPath` standardizes the path once and uses
+the same value for both the dedupe lookup and the persisted `Project.path`,
+so reopening the same folder always selects the existing project rather than
+creating a duplicate.
+
+The privileged install flow in `CLIAccessor.installCLI` runs off the main
+thread (`Task.detached` + AppleScript), and the bundle path is escaped using
+`ShellEscaper` before it is interpolated into `do shell script "…" with
+administrator privileges`, defending against backslash / `$` / backtick
+injection from the bundle path.
 
 ## Notification System
 

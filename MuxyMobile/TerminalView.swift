@@ -99,7 +99,6 @@ struct TerminalView: View {
     private func attemptAutoTakeOver() {
         guard let cols = reportedCols, let rows = reportedRows else { return }
         guard autoTakenPaneID != paneID else { return }
-        guard !isOwnedBySelf else { return }
         autoTakenPaneID = paneID
         takeOverInFlight = true
         Task {
@@ -182,6 +181,8 @@ private struct SwiftTermRepresentable: UIViewRepresentable {
         if let previousPaneID = uiView.paneID, previousPaneID != paneID {
             context.coordinator.unbind()
             connection.unsubscribeTerminalBytes(paneID: previousPaneID)
+            Task { await connection.releasePane(paneID: previousPaneID) }
+            uiView.getTerminal().resetToInitialState()
             uiView.paneID = paneID
             context.coordinator.bind(view: uiView, paneID: paneID, connection: connection, onSize: onSize)
             subscribe(view: uiView, paneID: paneID)
@@ -206,7 +207,7 @@ private struct SwiftTermRepresentable: UIViewRepresentable {
         connection.subscribeTerminalBytes(paneID: paneID) { [weak view] data in
             guard let view else { return }
             let bytes = [UInt8](data)
-            view.feed(byteArray: bytes[...])
+            view.feedPreservingScroll(byteArray: bytes[...])
         }
     }
 
@@ -222,6 +223,7 @@ private struct SwiftTermRepresentable: UIViewRepresentable {
         private var onSize: ((UInt32, UInt32) -> Void)?
         private var lastReportedCols: Int = 0
         private var lastReportedRows: Int = 0
+        private var isReady: Bool = false
 
         func bind(view: MuxySwiftTermView, paneID: UUID, connection: ConnectionManager, onSize: @escaping (UInt32, UInt32) -> Void) {
             self.view = view
@@ -230,14 +232,7 @@ private struct SwiftTermRepresentable: UIViewRepresentable {
             self.onSize = onSize
             lastReportedCols = 0
             lastReportedRows = 0
-            let terminal = view.getTerminal()
-            let cols = terminal.cols
-            let rows = terminal.rows
-            if cols > 0, rows > 0 {
-                lastReportedCols = cols
-                lastReportedRows = rows
-                onSize(UInt32(cols), UInt32(rows))
-            }
+            isReady = true
         }
 
         func updateOnSize(_ onSize: @escaping (UInt32, UInt32) -> Void) {
@@ -245,6 +240,7 @@ private struct SwiftTermRepresentable: UIViewRepresentable {
         }
 
         func unbind() {
+            isReady = false
             view = nil
             paneID = nil
             connection = nil
@@ -256,12 +252,13 @@ private struct SwiftTermRepresentable: UIViewRepresentable {
                 guard let paneID, let connection, let view else { return }
                 let bytes = view.accessoryTransformedBytes(data)
                 guard !bytes.isEmpty else { return }
-                Task { await connection.sendTerminalInput(paneID: paneID, bytes: bytes) }
+                connection.sendTerminalInput(paneID: paneID, bytes: bytes)
             }
         }
 
         nonisolated func sizeChanged(source _: SwiftTerm.TerminalView, newCols: Int, newRows: Int) {
             MainActor.assumeIsolated {
+                guard isReady else { return }
                 guard newCols > 0, newRows > 0 else { return }
                 if newCols == lastReportedCols, newRows == lastReportedRows { return }
                 lastReportedCols = newCols
@@ -297,7 +294,11 @@ final class MuxySwiftTermView: SwiftTerm.TerminalView {
 
     private var keyboardHidden = false
     private var wheelAccumulatedDelta: CGFloat = 0
-    private static let wheelPointsPerTick: CGFloat = 24
+    private static let wheelPointsPerTick: CGFloat = 16
+    private static let wheelMaxTicksPerFrame: Int = 2
+
+    private var userDetachedFromBottom = false
+    private static let bottomStickThreshold: CGFloat = 2
 
     private let hiddenKeyboardPlaceholder: UIView = {
         let view = UIView(frame: .zero)
@@ -320,12 +321,27 @@ final class MuxySwiftTermView: SwiftTerm.TerminalView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override var contentOffset: CGPoint {
+        didSet {
+            if isTracking || isDragging || isDecelerating {
+                updateUserDetachedFromBottom()
+            }
+        }
+    }
+
+    func feedPreservingScroll(byteArray: ArraySlice<UInt8>) {
+        preserveDetachedScrollPosition {
+            feed(byteArray: byteArray)
+        }
+    }
+
     func applyAccessoryTheme(_ theme: ConnectionManager.DeviceTheme?) {
         muxyAccessoryBar.applyTheme(theme)
     }
 
     private var lastAppliedFg: UInt32?
     private var lastAppliedBg: UInt32?
+    private var lastAppliedPalette: [UInt32]?
 
     func applyMuxyTheme(_ theme: ConnectionManager.DeviceTheme?) {
         let fgRGB = theme?.fg ?? 0xFFFFFF
@@ -336,6 +352,10 @@ final class MuxySwiftTermView: SwiftTerm.TerminalView {
             let terminal = getTerminal()
             setForegroundColor(source: terminal, color: Self.swiftTermColor(fgRGB))
             setBackgroundColor(source: terminal, color: Self.swiftTermColor(bgRGB))
+        }
+        if let palette = theme?.palette, palette.count == 16, palette != lastAppliedPalette {
+            lastAppliedPalette = palette
+            installColors(palette.map(Self.swiftTermColor))
         }
         caretColor = UIColor(theme?.fgColor ?? .white)
         overrideUserInterfaceStyle = (theme?.isDark ?? true) ? .dark : .light
@@ -374,7 +394,7 @@ final class MuxySwiftTermView: SwiftTerm.TerminalView {
 
     private func sendBytes(_ bytes: Data) {
         guard !bytes.isEmpty, let paneID, let connection else { return }
-        Task { await connection.sendTerminalInput(paneID: paneID, bytes: bytes) }
+        connection.sendTerminalInput(paneID: paneID, bytes: bytes)
     }
 
     private func pasteFromClipboard() {
@@ -409,6 +429,28 @@ final class MuxySwiftTermView: SwiftTerm.TerminalView {
         addGestureRecognizer(gesture)
     }
 
+    private func preserveDetachedScrollPosition(_ update: () -> Void) {
+        let wasDetached = userDetachedFromBottom
+        let preservedOffset = contentOffset
+        update()
+        guard wasDetached else {
+            updateUserDetachedFromBottom()
+            return
+        }
+        let maxOffsetY = max(0, contentSize.height - bounds.height)
+        let restoredOffset = CGPoint(x: preservedOffset.x, y: min(preservedOffset.y, maxOffsetY))
+        if contentOffset != restoredOffset {
+            setContentOffset(restoredOffset, animated: false)
+        }
+        updateUserDetachedFromBottom()
+    }
+
+    private func updateUserDetachedFromBottom() {
+        let maxOffsetY = max(0, contentSize.height - bounds.height)
+        let distanceFromBottom = maxOffsetY - contentOffset.y
+        userDetachedFromBottom = distanceFromBottom > Self.bottomStickThreshold
+    }
+
     private lazy var wheelGestureDelegate: WheelGestureDelegate = {
         let d = WheelGestureDelegate()
         d.shouldFire = { [weak self] in
@@ -430,10 +472,12 @@ final class MuxySwiftTermView: SwiftTerm.TerminalView {
             let translation = gesture.translation(in: self)
             gesture.setTranslation(.zero, in: self)
             wheelAccumulatedDelta += translation.y
-            let ticks = Int((wheelAccumulatedDelta / Self.wheelPointsPerTick).rounded(.towardZero))
-            guard ticks != 0 else { return }
-            wheelAccumulatedDelta -= CGFloat(ticks) * Self.wheelPointsPerTick
-            emitWheelTicks(ticks, terminal: terminal, location: gesture.location(in: self))
+            let baseTicks = Int((wheelAccumulatedDelta / Self.wheelPointsPerTick).rounded(.towardZero))
+            guard baseTicks != 0 else { return }
+            wheelAccumulatedDelta -= CGFloat(baseTicks) * Self.wheelPointsPerTick
+            let clamped = max(-Self.wheelMaxTicksPerFrame, min(Self.wheelMaxTicksPerFrame, baseTicks))
+            guard clamped != 0 else { return }
+            emitWheelTicks(clamped, terminal: terminal, location: gesture.location(in: self))
         case .ended,
              .cancelled,
              .failed:

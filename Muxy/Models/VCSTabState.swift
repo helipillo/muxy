@@ -69,6 +69,7 @@ final class VCSTabState {
     var isRefreshingPullRequest = false
     var hasFetchedPullRequestInfo = false
     private(set) var isGitRepo = false
+    private(set) var remoteWebURL: URL?
 
     var commitMessage = ""
     var branches: [String] = []
@@ -84,10 +85,42 @@ final class VCSTabState {
     var commits: [GitCommit] = []
     var isLoadingCommits = false
     var hasMoreCommits = true
-    var stagedCollapsed = false
-    var changesCollapsed = false
-    var historyCollapsed = false
-    var sectionRatios: [CGFloat] = [0.33, 0.33, 0.34]
+    var stagedCollapsed = false {
+        didSet { persistCollapseIfChanged(oldValue, stagedCollapsed) }
+    }
+
+    var changesCollapsed = false {
+        didSet { persistCollapseIfChanged(oldValue, changesCollapsed) }
+    }
+
+    var historyCollapsed = false {
+        didSet { persistCollapseIfChanged(oldValue, historyCollapsed) }
+    }
+
+    var pullRequestsCollapsed = true {
+        didSet { persistCollapseIfChanged(oldValue, pullRequestsCollapsed) }
+    }
+
+    var changesVisible = true
+    var historyVisible = true
+    var pullRequestsVisible = true
+    var sectionRatios: [CGFloat] = [0.25, 0.25, 0.25, 0.25] {
+        didSet {
+            guard isLoaded, sectionRatios != oldValue else { return }
+            VCSPersistedSettings.storeSectionRatios(sectionRatios, repoPath: projectPath)
+        }
+    }
+
+    @ObservationIgnored private var isLoaded = false
+
+    var pullRequests: [GitRepositoryService.PRListItem] = []
+    var isLoadingPullRequests = false
+    var pullRequestsLastError: String?
+    var pullRequestsLastFetched: Date?
+    var pullRequestSearchQuery = ""
+    var pullRequestStateFilter: GitRepositoryService.PRListFilter = .open
+    var pullRequestAutoSyncMinutes: Int = 0
+    var checkingOutPRNumber: Int?
 
     var stagedFiles: [GitStatusFile] {
         files.filter(\.isStaged)
@@ -131,6 +164,8 @@ final class VCSTabState {
     @ObservationIgnored private var prInfoTask: Task<Void, Never>?
     @ObservationIgnored private var loadBranchesTask: Task<Void, Never>?
     @ObservationIgnored private var commitLogTask: Task<Void, Never>?
+    @ObservationIgnored private var prListTask: Task<Void, Never>?
+    @ObservationIgnored private var prAutoSyncTask: Task<Void, Never>?
     @ObservationIgnored private var watcher: GitDirectoryWatcher?
     @ObservationIgnored nonisolated(unsafe) private var remoteChangeObserver: NSObjectProtocol?
     @ObservationIgnored private var isRefreshing = false
@@ -141,8 +176,24 @@ final class VCSTabState {
 
     init(projectPath: String) {
         self.projectPath = projectPath
+        pullRequestAutoSyncMinutes = VCSPersistedSettings.loadAutoSyncMinutes(repoPath: projectPath)
+        let visibility = VCSPersistedSettings.loadSectionVisibility(repoPath: projectPath)
+        changesVisible = visibility.changes
+        historyVisible = visibility.history
+        pullRequestsVisible = visibility.pullRequests
+        let collapse = VCSPersistedSettings.loadSectionCollapse(repoPath: projectPath)
+        stagedCollapsed = collapse.staged
+        changesCollapsed = collapse.changes
+        historyCollapsed = collapse.history
+        pullRequestsCollapsed = collapse.pullRequests
+        let storedRatios = VCSPersistedSettings.loadSectionRatios(repoPath: projectPath)
+        if storedRatios.count == sectionRatios.count {
+            sectionRatios = storedRatios
+        }
+        isLoaded = true
         startWatching()
         observeRemoteChanges()
+        rescheduleAutoSync()
     }
 
     deinit {
@@ -151,6 +202,8 @@ final class VCSTabState {
         prInfoTask?.cancel()
         loadBranchesTask?.cancel()
         commitLogTask?.cancel()
+        prListTask?.cancel()
+        prAutoSyncTask?.cancel()
         diffCache.cancelAll()
         if let remoteChangeObserver {
             NotificationCenter.default.removeObserver(remoteChangeObserver)
@@ -207,16 +260,22 @@ final class VCSTabState {
         branchTask?.cancel()
         prInfoTask?.cancel()
         let shouldForcePR = forcePRFetch || !incremental
+        if shouldForcePR {
+            isRefreshingPullRequest = true
+        }
         branchTask = Task { [weak self] in
             guard let self else { return }
             do {
                 async let branchValue = git.currentBranch(repoPath: projectPath)
                 async let headValue = git.headSha(repoPath: projectPath)
+                async let remoteURLValue = git.remoteWebURL(repoPath: projectPath)
                 let branch = try await branchValue
                 let head = await headValue
+                let remoteURL = await remoteURLValue
                 guard !Task.isCancelled else { return }
 
                 isGitRepo = true
+                remoteWebURL = remoteURL
                 let branchChanged = branchName != branch
                 if branchChanged {
                     hasFetchedPullRequestInfo = false
@@ -241,6 +300,7 @@ final class VCSTabState {
                 hasFetchedPullRequestInfo = false
                 lastFetchedHeadSha = nil
                 aheadBehind = .init(ahead: 0, behind: 0, hasUpstream: false)
+                isRefreshingPullRequest = false
             }
         }
 
@@ -902,14 +962,18 @@ final class VCSTabState {
             guard let self else { return }
             defer { isMergingPullRequest = false }
             do {
+                let skipDeleteForFork = deleteBranch && info.isCrossRepository
                 try await git.mergePullRequest(
                     repoPath: projectPath,
                     number: info.number,
                     method: method,
-                    deleteBranch: deleteBranch
+                    deleteBranch: deleteBranch && !info.isCrossRepository
                 )
                 guard !Task.isCancelled else { return }
                 pullRequestInfo = nil
+                if skipDeleteForFork {
+                    ToastState.shared.show("Branch lives on a fork — left intact.")
+                }
                 onSuccess(info, branch)
             } catch {
                 guard !Task.isCancelled else { return }
@@ -1006,6 +1070,129 @@ final class VCSTabState {
             return
         }
         loadDiff(filePath: filePath, forceFull: forceFull)
+    }
+
+    var filteredPullRequests: [GitRepositoryService.PRListItem] {
+        let query = pullRequestSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return pullRequests }
+        return pullRequests.filter { item in
+            item.title.lowercased().contains(query)
+                || item.author.lowercased().contains(query)
+                || item.headBranch.lowercased().contains(query)
+                || String(item.number).contains(query)
+        }
+    }
+
+    func loadPullRequests() {
+        prListTask?.cancel()
+        isLoadingPullRequests = true
+        pullRequestsLastError = nil
+        let filter = pullRequestStateFilter
+        prListTask = Task { [weak self] in
+            guard let self else { return }
+            defer { isLoadingPullRequests = false }
+            do {
+                let items = try await git.listPullRequests(repoPath: projectPath, filter: filter)
+                guard !Task.isCancelled else { return }
+                pullRequests = items
+                pullRequestsLastFetched = Date()
+            } catch {
+                guard !Task.isCancelled else { return }
+                pullRequests = []
+                pullRequestsLastError = errorText(error)
+            }
+        }
+    }
+
+    func setPullRequestStateFilter(_ filter: GitRepositoryService.PRListFilter) {
+        guard pullRequestStateFilter != filter else { return }
+        pullRequestStateFilter = filter
+        loadPullRequests()
+    }
+
+    func setPullRequestAutoSyncMinutes(_ minutes: Int) {
+        pullRequestAutoSyncMinutes = minutes
+        VCSPersistedSettings.storeAutoSyncMinutes(minutes, repoPath: projectPath)
+        rescheduleAutoSync()
+    }
+
+    func checkoutPullRequest(_ item: GitRepositoryService.PRListItem) {
+        guard checkingOutPRNumber == nil else { return }
+        checkingOutPRNumber = item.number
+        Task { [weak self] in
+            guard let self else { return }
+            defer { checkingOutPRNumber = nil }
+            do {
+                try await git.checkoutPullRequest(repoPath: projectPath, number: item.number)
+                guard !Task.isCancelled else { return }
+                ToastState.shared.show("Checked out PR #\(item.number)")
+                commits = []
+                performRefresh(incremental: false, forcePRFetch: true)
+                loadBranches()
+            } catch {
+                guard !Task.isCancelled else { return }
+                showStatus(errorText(error), isError: true)
+            }
+        }
+    }
+
+    private func rescheduleAutoSync() {
+        prAutoSyncTask?.cancel()
+        let minutes = pullRequestAutoSyncMinutes
+        guard minutes > 0 else { return }
+        let interval = UInt64(minutes) * 60 * 1_000_000_000
+        prAutoSyncTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: interval)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.loadPullRequests()
+                }
+            }
+        }
+    }
+
+    func setChangesVisible(_ visible: Bool) {
+        guard changesVisible != visible else { return }
+        changesVisible = visible
+        VCSPersistedSettings.storeSectionVisibility(currentVisibility, repoPath: projectPath)
+    }
+
+    func setHistoryVisible(_ visible: Bool) {
+        guard historyVisible != visible else { return }
+        historyVisible = visible
+        VCSPersistedSettings.storeSectionVisibility(currentVisibility, repoPath: projectPath)
+        if visible, commits.isEmpty {
+            loadCommits()
+        }
+    }
+
+    func setPullRequestsVisible(_ visible: Bool) {
+        guard pullRequestsVisible != visible else { return }
+        pullRequestsVisible = visible
+        VCSPersistedSettings.storeSectionVisibility(currentVisibility, repoPath: projectPath)
+    }
+
+    private func persistCollapseIfChanged(_ oldValue: Bool, _ newValue: Bool) {
+        guard isLoaded, oldValue != newValue else { return }
+        VCSPersistedSettings.storeSectionCollapse(currentCollapse, repoPath: projectPath)
+    }
+
+    private var currentCollapse: VCSPersistedSettings.SectionCollapse {
+        VCSPersistedSettings.SectionCollapse(
+            staged: stagedCollapsed,
+            changes: changesCollapsed,
+            history: historyCollapsed,
+            pullRequests: pullRequestsCollapsed
+        )
+    }
+
+    private var currentVisibility: VCSPersistedSettings.SectionVisibility {
+        VCSPersistedSettings.SectionVisibility(
+            changes: changesVisible,
+            history: historyVisible,
+            pullRequests: pullRequestsVisible
+        )
     }
 
     func loadDiffWithHints(

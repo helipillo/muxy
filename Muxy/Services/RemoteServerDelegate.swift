@@ -41,8 +41,7 @@ final class RemoteServerDelegate: MuxyRemoteServerDelegate {
     }
 
     private func broadcastTheme() {
-        guard let theme = ThemeService.shared.currentThemeColors() else { return }
-        let dto = DeviceThemeEventDTO(fg: theme.fg, bg: theme.bg)
+        guard let dto = ThemeService.shared.currentThemeColors() else { return }
         server?.broadcast(MuxyEvent(event: .themeChanged, data: .deviceTheme(dto)))
     }
 
@@ -203,13 +202,24 @@ final class RemoteServerDelegate: MuxyRemoteServerDelegate {
         return .approved(deviceName: name)
     }
 
-    func getDeviceTheme() -> (fg: UInt32, bg: UInt32)? {
+    func getDeviceTheme() -> DeviceThemeEventDTO? {
         ThemeService.shared.currentThemeColors()
     }
 
     func takeOverPane(paneID: UUID, clientID: UUID, cols: UInt32, rows: UInt32) {
+        let snapshotBytes = buildTerminalSnapshot(paneID: paneID)
         PaneOwnershipStore.shared.assign(paneID: paneID, to: clientID)
+        if let bytes = snapshotBytes, !bytes.isEmpty {
+            let dto = TerminalOutputEventDTO(paneID: paneID, bytes: bytes)
+            let event = MuxyEvent(event: .terminalSnapshot, data: .terminalSnapshot(dto))
+            server?.send(event, to: clientID)
+        }
         applyPTYSize(paneID: paneID, cols: cols, rows: rows)
+    }
+
+    private func buildTerminalSnapshot(paneID: UUID) -> Data? {
+        guard let snapshot = getTerminalContent(paneID: paneID) else { return nil }
+        return RemoteTerminalSnapshotBuilder.buildBytes(from: snapshot)
     }
 
     func releasePane(paneID: UUID, clientID: UUID) {
@@ -260,7 +270,13 @@ final class RemoteServerDelegate: MuxyRemoteServerDelegate {
             cursorVisible: out.cursor_visible,
             defaultFg: out.default_fg,
             defaultBg: out.default_bg,
-            cells: cells
+            cells: cells,
+            altScreen: out.alt_screen,
+            cursorKeys: out.cursor_keys,
+            bracketedPaste: out.bracketed_paste,
+            focusEvent: out.focus_event,
+            mouseEvent: out.mouse_event,
+            mouseFormat: out.mouse_format
         )
     }
 

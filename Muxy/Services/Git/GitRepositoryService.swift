@@ -34,6 +34,25 @@ struct GitRepositoryService {
         let mergeable: Bool?
         let mergeStateStatus: PRMergeStateStatus
         let checks: PRChecks
+        let isCrossRepository: Bool
+    }
+
+    struct PRListItem: Equatable, Identifiable {
+        let number: Int
+        let title: String
+        let author: String
+        let headBranch: String
+        let headRefOid: String
+        let baseBranch: String
+        let state: PRState
+        let isDraft: Bool
+        let url: String
+        let updatedAt: Date?
+        let checks: PRChecks
+        let mergeable: Bool?
+        let mergeStateStatus: PRMergeStateStatus
+
+        var id: Int { number }
     }
 
     enum PRState: String {
@@ -171,32 +190,65 @@ struct GitRepositoryService {
         ) {
             return cached
         }
-        let info = await pullRequestInfo(repoPath: repoPath, branch: branch)
+        let info = await pullRequestInfo(repoPath: repoPath, branch: branch, headSha: headSha)
         GitMetadataCache.shared.storePRInfo(info, repoPath: repoPath, branch: branch, headSha: headSha)
         return info
     }
 
-    func pullRequestInfo(repoPath: String, branch: String) async -> PRInfo? {
-        guard let ghPath = GitProcessRunner.resolveExecutable("gh") else { return nil }
-        let jsonFields = "url,number,state,isDraft,baseRefName,mergeable,mergeStateStatus,statusCheckRollup"
+    private static let prInfoJSONFields =
+        "url,number,state,isDraft,baseRefName,mergeable,mergeStateStatus,statusCheckRollup,isCrossRepository"
+    private static let prInfoJSONFieldsWithHeadRefOid = prInfoJSONFields + ",headRefOid"
 
-        if let info = await ghPRView(ghPath: ghPath, repoPath: repoPath, jsonFields: jsonFields) {
+    func pullRequestInfo(repoPath: String, branch: String, headSha: String? = nil) async -> PRInfo? {
+        guard let ghPath = GitProcessRunner.resolveExecutable("gh") else { return nil }
+
+        if let info = await ghPRView(ghPath: ghPath, repoPath: repoPath, jsonFields: Self.prInfoJSONFields) {
             return info
         }
-        return await ghPRView(
-            ghPath: ghPath, repoPath: repoPath, branch: branch, jsonFields: jsonFields
+        if let info = await ghPRView(
+            ghPath: ghPath, repoPath: repoPath, argument: branch, jsonFields: Self.prInfoJSONFields
+        ) {
+            return info
+        }
+
+        let resolvedSha: String? = if let headSha { headSha } else { await self.headSha(repoPath: repoPath) }
+        if let resolvedSha {
+            return await pullRequestInfoByHeadSha(
+                ghPath: ghPath, repoPath: repoPath, headSha: resolvedSha
+            )
+        }
+        return nil
+    }
+
+    private func pullRequestInfoByHeadSha(
+        ghPath: String,
+        repoPath: String,
+        headSha: String
+    ) async -> PRInfo? {
+        let arguments = [
+            "pr", "list",
+            "--state", "all",
+            "--limit", "100",
+            "--json", Self.prInfoJSONFieldsWithHeadRefOid,
+        ]
+        let result = try? await GitProcessRunner.runCommand(
+            executable: ghPath,
+            arguments: arguments,
+            workingDirectory: repoPath
         )
+        guard let result, result.status == 0 else { return nil }
+        return GitPRParser.parsePRInfoMatchingHeadSha(result.stdout, headSha: headSha)
     }
 
     private func ghPRView(
         ghPath: String,
         repoPath: String,
-        branch: String? = nil,
+        argument: String? = nil,
         jsonFields: String
     ) async -> PRInfo? {
         var arguments = ["pr", "view"]
-        if let branch {
-            arguments.append(branch)
+        if let argument {
+            arguments.append(argument)
         }
         arguments += ["--json", jsonFields]
 
@@ -207,6 +259,68 @@ struct GitRepositoryService {
         )
         guard let result, result.status == 0 else { return nil }
         return GitPRParser.parsePRInfo(result.stdout)
+    }
+
+    enum PRListFilter: String {
+        case open
+        case closed
+        case merged
+        case all
+    }
+
+    func listPullRequests(
+        repoPath: String,
+        filter: PRListFilter = .open,
+        limit: Int = 100
+    ) async throws -> [PRListItem] {
+        guard let ghPath = GitProcessRunner.resolveExecutable("gh") else {
+            throw PRCreateError.ghNotInstalled
+        }
+        let jsonFields = [
+            "number", "title", "author",
+            "headRefName", "headRefOid", "baseRefName",
+            "state", "isDraft", "url", "updatedAt",
+            "statusCheckRollup", "mergeable", "mergeStateStatus",
+        ].joined(separator: ",")
+        let arguments = [
+            "pr", "list",
+            "--state", filter.rawValue,
+            "--limit", String(limit),
+            "--json", jsonFields,
+        ]
+        let result = try await GitProcessRunner.runCommand(
+            executable: ghPath,
+            arguments: arguments,
+            workingDirectory: repoPath
+        )
+        guard result.status == 0 else {
+            let message = result.stderr.isEmpty ? result.stdout : result.stderr
+            throw PRCreateError.commandFailed(
+                message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? "Failed to list pull requests."
+                    : message.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }
+        return GitPRParser.parsePRList(result.stdout)
+    }
+
+    func checkoutPullRequest(repoPath: String, number: Int) async throws {
+        guard let ghPath = GitProcessRunner.resolveExecutable("gh") else {
+            throw PRCreateError.ghNotInstalled
+        }
+        let result = try await GitProcessRunner.runCommand(
+            executable: ghPath,
+            arguments: ["pr", "checkout", String(number)],
+            workingDirectory: repoPath
+        )
+        guard result.status == 0 else {
+            let message = result.stderr.isEmpty ? result.stdout : result.stderr
+            throw PRCreateError.commandFailed(
+                message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? "Failed to checkout pull request."
+                    : message.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }
     }
 
     func aheadBehind(repoPath: String, branch: String) async -> AheadBehind {
@@ -270,6 +384,43 @@ struct GitRepositoryService {
             GitMetadataCache.shared.storeDefaultBranch(resolved, repoPath: repoPath)
         }
         return resolved
+    }
+
+    func remoteWebURL(repoPath: String, remote: String = "origin") async -> URL? {
+        let result = try? await GitProcessRunner.runGit(
+            repoPath: repoPath,
+            arguments: ["remote", "get-url", remote]
+        )
+        guard let result, result.status == 0 else { return nil }
+        let raw = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self.webURL(fromRemoteURL: raw)
+    }
+
+    static func webURL(fromRemoteURL raw: String) -> URL? {
+        guard !raw.isEmpty else { return nil }
+        var value = raw
+        if value.hasSuffix(".git") { value = String(value.dropLast(4)) }
+
+        if value.hasPrefix("http://") || value.hasPrefix("https://") {
+            return URL(string: value)
+        }
+
+        if value.hasPrefix("ssh://") {
+            guard var components = URLComponents(string: value) else { return nil }
+            components.scheme = "https"
+            components.user = nil
+            components.password = nil
+            components.port = nil
+            return components.url
+        }
+
+        if let atIndex = value.firstIndex(of: "@"), let colonIndex = value[atIndex...].firstIndex(of: ":") {
+            let host = String(value[value.index(after: atIndex) ..< colonIndex])
+            let path = String(value[value.index(after: colonIndex)...])
+            return URL(string: "https://\(host)/\(path)")
+        }
+
+        return nil
     }
 
     private func resolveDefaultBranch(repoPath: String) async -> String? {
@@ -340,15 +491,28 @@ struct GitRepositoryService {
 
         GitMetadataCache.shared.invalidatePRInfo(repoPath: repoPath, branch: branch)
 
+        let createdURL = createResult.stdout
+            .split(whereSeparator: { $0.isNewline || $0.isWhitespace })
+            .map(String.init)
+            .first(where: { $0.hasPrefix("https://") }) ?? ""
+
+        if !createdURL.isEmpty, let info = await ghPRView(
+            ghPath: ghPath,
+            repoPath: repoPath,
+            argument: createdURL,
+            jsonFields: Self.prInfoJSONFields
+        ) {
+            return info
+        }
+
         if let info = await pullRequestInfo(repoPath: repoPath, branch: branch) {
             return info
         }
 
-        let fallbackURL = createResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         throw PRCreateError.commandFailed(
-            fallbackURL.isEmpty
+            createdURL.isEmpty
                 ? "Pull request created but could not be read back."
-                : "Pull request created at \(fallbackURL) but could not be read back."
+                : "Pull request created at \(createdURL) but could not be read back."
         )
     }
 

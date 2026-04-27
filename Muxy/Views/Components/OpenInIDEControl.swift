@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 @MainActor
@@ -105,7 +104,8 @@ struct OpenInIDEControl: View {
                 Text("No supported IDEs found")
                     .font(.system(size: 12))
                     .foregroundStyle(MuxyTheme.fgMuted)
-                    .padding(.horizontal, 10)
+                    .padding(.leading, 10)
+                    .padding(.trailing, 6)
                     .padding(.vertical, 8)
             } else {
                 if !editorApps.isEmpty {
@@ -117,8 +117,7 @@ struct OpenInIDEControl: View {
             }
         }
         .padding(.vertical, 4)
-        .frame(width: menuPopoverWidth, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
+        .fixedSize(horizontal: true, vertical: true)
         .background(MuxyTheme.bg)
     }
 
@@ -128,7 +127,8 @@ struct OpenInIDEControl: View {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgMuted)
-                .padding(.horizontal, 9)
+                .padding(.leading, 9)
+                .padding(.trailing, 6)
                 .padding(.top, 4)
                 .padding(.bottom, 1)
 
@@ -136,27 +136,6 @@ struct OpenInIDEControl: View {
                 menuButton(for: ide)
             }
         }
-    }
-
-    private var menuPopoverWidth: CGFloat {
-        let rowFont = NSFont.systemFont(ofSize: 12)
-        let sectionFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
-
-        let appWidths = installedApps.map { textWidth($0.displayName, font: rowFont) }
-        let sectionWidths = [
-            textWidth("Editors & IDEs", font: sectionFont),
-            textWidth("Other Tools", font: sectionFont),
-            textWidth("No supported IDEs found", font: rowFont),
-        ]
-
-        let contentWidth = (appWidths + sectionWidths).max() ?? 0
-        let paddedWidth = contentWidth + 22
-        return min(paddedWidth, 280)
-    }
-
-    private func textWidth(_ text: String, font: NSFont) -> CGFloat {
-        let attributes: [NSAttributedString.Key: Any] = [.font: font]
-        return ceil((text as NSString).size(withAttributes: attributes).width)
     }
 
     private var installedApps: [IDEIntegrationService.IDEApplication] {
@@ -246,7 +225,8 @@ private struct IDEMenuRow: View {
                     .font(.system(size: 12))
             }
             .foregroundStyle(MuxyTheme.fg)
-            .padding(.horizontal, 9)
+            .padding(.leading, 9)
+            .padding(.trailing, 6)
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(hovered ? MuxyTheme.hover : .clear)

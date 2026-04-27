@@ -129,7 +129,7 @@ struct MuxyCommands: Commands {
                     )
                 } label: {
                     HStack(spacing: 8) {
-                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 18)
+                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 20)
                         Text("Open in \(defaultIDE.displayName)")
                     }
                 }
@@ -153,7 +153,7 @@ struct MuxyCommands: Commands {
                             )
                         } label: {
                             HStack(spacing: 8) {
-                                AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 18)
+                                AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 20)
                                 Text(ide.displayName)
                             }
                         }

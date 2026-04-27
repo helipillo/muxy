@@ -83,12 +83,14 @@ struct PaneTabStrip: View {
                     .help(shortcutTooltip("Split Down", for: .splitDown))
                 IconButton(symbol: "plus", accessibilityLabel: "New Tab") { onCreateTab() }
                     .help(shortcutTooltip("New Tab", for: .newTab))
-                OpenInIDEControl(
-                    projectPath: openInIDEProjectPath,
-                    filePath: openInIDEFilePath,
-                    line: openInIDELine,
-                    column: openInIDEColumn
-                )
+                if isWindowTitleBar {
+                    OpenInIDEControl(
+                        projectPath: openInIDEProjectPath,
+                        filePath: openInIDEFilePath,
+                        line: openInIDELine,
+                        column: openInIDEColumn
+                    )
+                }
                 if showVCSButton {
                     FileDiffIconButton(action: onCreateVCSTab)
                         .help(shortcutTooltip("Source Control", for: .openVCSTab))

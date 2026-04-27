@@ -25,15 +25,16 @@ struct OpenInIDEControl: View {
             Button(action: openDefaultIDE) {
                 Group {
                     if let defaultIDE {
-                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 14)
+                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 16)
                     } else {
                         Image(systemName: "chevron.left.forwardslash.chevron.right")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(primaryForeground)
                     }
                 }
-                .frame(width: 20, height: 24)
+                .frame(width: 22, height: 24)
                 .contentShape(Rectangle())
+                .background(hoveredPrimary ? MuxyTheme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
             }
             .buttonStyle(.plain)
             .disabled(projectPath == nil || defaultIDE == nil)
@@ -49,8 +50,10 @@ struct OpenInIDEControl: View {
                     .foregroundStyle(menuForeground)
                     .frame(width: 14, height: 24)
                     .contentShape(Rectangle())
+                    .background(hoveredMenu ? MuxyTheme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .disabled(projectPath == nil)
             .onHover { hoveredMenu = $0 }
             .help(menuHelpText)
@@ -62,7 +65,7 @@ struct OpenInIDEControl: View {
             Button(action: openDefaultIDE) {
                 HStack(spacing: 6) {
                     if let defaultIDE {
-                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 14)
+                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 16)
                     } else {
                         Image(systemName: "chevron.left.forwardslash.chevron.right")
                     }
@@ -73,6 +76,7 @@ struct OpenInIDEControl: View {
                 .padding(.horizontal, 8)
                 .frame(height: 24)
                 .contentShape(Rectangle())
+                .background(hoveredPrimary ? MuxyTheme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
             }
             .buttonStyle(.plain)
             .disabled(projectPath == nil || defaultIDE == nil)
@@ -88,8 +92,10 @@ struct OpenInIDEControl: View {
                     .foregroundStyle(menuForeground)
                     .frame(width: 18, height: 24)
                     .contentShape(Rectangle())
+                    .background(hoveredMenu ? MuxyTheme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .disabled(projectPath == nil)
             .onHover { hoveredMenu = $0 }
             .help(menuHelpText)
@@ -107,7 +113,7 @@ struct OpenInIDEControl: View {
                     open(ide)
                 } label: {
                     HStack(spacing: 8) {
-                        AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 11)
+                        AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 13)
                         Text(ide.displayName)
                         if ide.bundleIdentifier == defaultIDE?.bundleIdentifier {
                             Spacer()

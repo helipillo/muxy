@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 
 struct MuxyCommands: Commands {
+    @ObservedObject private var ideService = IDEIntegrationService.shared
+
     let appState: AppState
     let projectStore: ProjectStore
     let worktreeStore: WorktreeStore
@@ -17,6 +19,12 @@ struct MuxyCommands: Commands {
     private var activeProject: Project? {
         guard let projectID = appState.activeProjectID else { return nil }
         return projectStore.projects.first { $0.id == projectID }
+    }
+
+    private var activeProjectPath: String? {
+        guard let project = activeProject else { return nil }
+        return worktreeStore.preferred(for: project.id, matching: appState.activeWorktreeID[project.id])?.path
+            ?? project.path
     }
 
     private var shortcutDispatcher: ShortcutActionDispatcher {
@@ -91,6 +99,35 @@ struct MuxyCommands: Commands {
                 performShortcutAction(.openProject)
             }
             .shortcut(for: .openProject, store: keyBindings)
+
+            if let defaultIDE = ideService.defaultIDE {
+                Button("Open in \(defaultIDE.displayName)") {
+                    guard let activeProjectPath else { return }
+                    _ = ideService.openProject(at: activeProjectPath, in: defaultIDE)
+                }
+                .disabled(activeProjectPath == nil)
+            }
+
+            Menu("Open in IDE") {
+                if ideService.installedApps.isEmpty {
+                    Button("No supported IDEs found") {}
+                        .disabled(true)
+                } else {
+                    ForEach(ideService.installedApps) { ide in
+                        Button(ide.displayName) {
+                            guard let activeProjectPath else { return }
+                            _ = ideService.openProject(at: activeProjectPath, in: ide)
+                        }
+                    }
+                }
+
+                Divider()
+
+                Button("Refresh IDE List") {
+                    ideService.refreshInstalledApps()
+                }
+            }
+            .disabled(activeProjectPath == nil)
 
             Button("New Tab") {
                 guard isMainWindowFocused else { return }

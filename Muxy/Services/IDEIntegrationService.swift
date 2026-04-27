@@ -36,6 +36,11 @@ final class IDEIntegrationService: ObservableObject {
         let rank: Int
     }
 
+    struct LaunchCommand: Hashable {
+        let executablePath: String
+        let arguments: [String]
+    }
+
     static let selectedBundleIdentifierKey = "muxy.ide.selectedBundleIdentifier"
 
     @Published private(set) var installedApps: [IDEApplication] = []
@@ -99,40 +104,86 @@ final class IDEIntegrationService: ObservableObject {
     ) -> Bool {
         guard let app = ide ?? defaultIDE else { return false }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = Self.launchArguments(
+        let commands = Self.launchCommands(
             for: app,
             projectPath: path,
-            editorLocation: editorLocation(filePath: filePath, line: line, column: column)
+            editorLocation: editorLocation(filePath: filePath, line: line, column: column),
+            availableCLICommands: availableCLICommands()
         )
 
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            return false
+        for command in commands {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: command.executablePath)
+            process.arguments = command.arguments
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+            } catch {
+                return false
+            }
+
+            guard process.terminationStatus == 0 else { return false }
         }
 
-        guard process.terminationStatus == 0 else { return false }
         defaults.set(app.bundleIdentifier, forKey: Self.selectedBundleIdentifierKey)
         return true
     }
 
-    static func launchArguments(
+    static func launchCommands(
         for ide: IDEApplication,
         projectPath: String,
-        editorLocation: EditorLocation?
-    ) -> [String] {
+        editorLocation: EditorLocation?,
+        availableCLICommands: [String: String]
+    ) -> [LaunchCommand] {
         switch launchStrategy(forBundleIdentifier: ide.bundleIdentifier) {
-        case .vscodeLike:
-            var args = ["-a", ide.appURL.path, "--args", projectPath]
-            if let editorLocation {
-                args += ["--goto", vscodeGotoTarget(for: editorLocation)]
+        case let .vscodeLike(commandNames):
+            if let executablePath = resolveCLIPath(commandNames: commandNames, availableCLICommands: availableCLICommands) {
+                var args = [projectPath]
+                if let editorLocation {
+                    args += ["--goto", vscodeGotoTarget(for: editorLocation)]
+                }
+                return [.init(executablePath: executablePath, arguments: args)]
             }
-            return args
+            var fallbackArgs = ["-a", ide.appURL.path, "--args", projectPath]
+            if let editorLocation {
+                fallbackArgs += ["--goto", vscodeGotoTarget(for: editorLocation)]
+            }
+            return [.init(executablePath: "/usr/bin/open", arguments: fallbackArgs)]
+
+        case let .zed(commandNames):
+            if let executablePath = resolveCLIPath(commandNames: commandNames, availableCLICommands: availableCLICommands) {
+                var args = [projectPath]
+                if let editorLocation {
+                    args.append(zedTarget(for: editorLocation))
+                }
+                return [.init(executablePath: executablePath, arguments: args)]
+            }
+            return [genericOpenCommand(for: ide, projectPath: projectPath, filePath: editorLocation?.filePath)]
+
+        case let .jetbrains(commandNames):
+            let projectCommand = genericOpenCommand(for: ide, projectPath: projectPath, filePath: nil)
+            guard let editorLocation,
+                  let executablePath = resolveCLIPath(commandNames: commandNames, availableCLICommands: availableCLICommands)
+            else {
+                if let editorLocation {
+                    return [genericOpenCommand(for: ide, projectPath: projectPath, filePath: editorLocation.filePath)]
+                }
+                return [projectCommand]
+            }
+
+            let fileCommand = LaunchCommand(
+                executablePath: executablePath,
+                arguments: [
+                    "--line", String(max(1, editorLocation.line)),
+                    "--column", String(max(1, editorLocation.column)),
+                    editorLocation.filePath,
+                ]
+            )
+            return [projectCommand, fileCommand]
+
         case .generic:
-            return ["-a", ide.appURL.path] + openTargetArguments(projectPath: projectPath, filePath: editorLocation?.filePath)
+            return [genericOpenCommand(for: ide, projectPath: projectPath, filePath: editorLocation?.filePath)]
         }
     }
 
@@ -153,6 +204,10 @@ final class IDEIntegrationService: ObservableObject {
         let safeLine = max(1, location.line)
         let safeColumn = max(1, location.column)
         return "\(location.filePath):\(safeLine):\(safeColumn)"
+    }
+
+    static func zedTarget(for location: EditorLocation) -> String {
+        vscodeGotoTarget(for: location)
     }
 
     static func resolveDefaultIDE(
@@ -195,7 +250,7 @@ final class IDEIntegrationService: ObservableObject {
 
         if loweredIdentifier.hasPrefix("com.jetbrains."),
            !loweredName.contains("toolbox") {
-            return MatchMetadata(symbolName: "chevron.left.forwardslash.chevron.right", rank: 40)
+            return MatchMetadata(symbolName: jetbrainsLikeSymbolName(for: loweredIdentifier), rank: 40)
         }
 
         if let keywordMatch = keywordMatches.first(where: { containsKeyword($0.keyword, in: haystack) }) {
@@ -277,16 +332,14 @@ final class IDEIntegrationService: ObservableObject {
         )
     }
 
-    private static func launchStrategy(forBundleIdentifier bundleIdentifier: String) -> LaunchStrategy {
-        if vscodeLikeBundleIdentifiers.contains(bundleIdentifier) {
-            return .vscodeLike
+    private func availableCLICommands() -> [String: String] {
+        var result: [String: String] = [:]
+        for commandName in Self.knownCLICommandNames {
+            if let path = Self.executablePath(named: commandName) {
+                result[commandName] = path
+            }
         }
-        return .generic
-    }
-
-    private enum LaunchStrategy {
-        case generic
-        case vscodeLike
+        return result
     }
 
     private func dedupeKey(for app: IDEApplication) -> String {
@@ -296,46 +349,147 @@ final class IDEIntegrationService: ObservableObject {
         return app.appURL.standardizedFileURL.path
     }
 
+    private static func executablePath(named commandName: String) -> String? {
+        let pathDirectories = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+            .split(separator: ":")
+            .map(String.init)
+            .filter { !$0.isEmpty }
+
+        for directory in pathDirectories {
+            let candidate = URL(fileURLWithPath: directory).appendingPathComponent(commandName).path
+            if FileManager.default.isExecutableFile(atPath: candidate) {
+                return candidate
+            }
+        }
+
+        return nil
+    }
+
+    private static func resolveCLIPath(
+        commandNames: [String],
+        availableCLICommands: [String: String]
+    ) -> String? {
+        for commandName in commandNames {
+            if let path = availableCLICommands[commandName] {
+                return path
+            }
+        }
+        return nil
+    }
+
+    private static func launchStrategy(forBundleIdentifier bundleIdentifier: String) -> LaunchStrategy {
+        if let commandNames = vscodeLikeBundleIdentifiers[bundleIdentifier] {
+            return .vscodeLike(commandNames: commandNames)
+        }
+        if let commandNames = zedLikeBundleIdentifiers[bundleIdentifier] {
+            return .zed(commandNames: commandNames)
+        }
+        if let commandNames = jetbrainsCLICommandNames[bundleIdentifier] {
+            return .jetbrains(commandNames: commandNames)
+        }
+        return .generic
+    }
+
+    private static func genericOpenCommand(for ide: IDEApplication, projectPath: String, filePath: String?) -> LaunchCommand {
+        LaunchCommand(
+            executablePath: "/usr/bin/open",
+            arguments: ["-a", ide.appURL.path] + openTargetArguments(projectPath: projectPath, filePath: filePath)
+        )
+    }
+
+    private static func jetbrainsLikeSymbolName(for bundleIdentifier: String) -> String {
+        aiCompanionBundleIdentifiers.contains(bundleIdentifier) ? "sparkles" : "chevron.left.forwardslash.chevron.right"
+    }
+
     private static func containsKeyword(_ keyword: String, in haystack: String) -> Bool {
         haystack.contains(keyword.lowercased())
     }
 
     private static let developerToolsCategory = "public.app-category.developer-tools"
 
-    private static let vscodeLikeBundleIdentifiers: Set<String> = [
-        "com.microsoft.VSCode",
-        "com.microsoft.VSCodeInsiders",
-        "com.todesktop.230313mzl4w4u92",
-        "com.exafunction.windsurf",
-        "com.vscodium",
+    private static let vscodeLikeBundleIdentifiers: [String: [String]] = [
+        "com.microsoft.VSCode": ["code"],
+        "com.microsoft.VSCodeInsiders": ["code-insiders"],
+        "com.todesktop.230313mzl4w4u92": ["cursor"],
+        "com.exafunction.windsurf": ["windsurf"],
+        "com.vscodium": ["codium", "vscodium"],
+    ]
+
+    private static let zedLikeBundleIdentifiers: [String: [String]] = [
+        "dev.zed.Zed": ["zed"],
+    ]
+
+    private static let jetbrainsCLICommandNames: [String: [String]] = [
+        "com.jetbrains.PhpStorm": ["phpstorm"],
+        "com.jetbrains.WebStorm": ["webstorm"],
+        "com.jetbrains.PyCharm": ["pycharm"],
+        "com.jetbrains.IntelliJ-IDEA": ["idea", "intellij"],
+        "com.jetbrains.CLion": ["clion"],
+        "com.jetbrains.GoLand": ["goland"],
+        "com.jetbrains.RubyMine": ["rubymine"],
+        "com.jetbrains.DataGrip": ["datagrip"],
+        "com.jetbrains.Rider": ["rider"],
+        "com.jetbrainsFleet": ["fleet"],
+        "com.jetbrains.air": ["air"],
+    ]
+
+    private static let aiCompanionBundleIdentifiers: Set<String> = [
+        "com.openai.codex",
+        "ai.opencode.desktop",
+        "com.google.antigravity",
+        "com.jcode.launcher",
+        "com.jetbrains.air",
+    ]
+
+    private static let knownCLICommandNames: Set<String> = [
+        "air",
+        "clion",
+        "code",
+        "code-insiders",
+        "codium",
+        "cursor",
+        "datagrip",
+        "fleet",
+        "goland",
+        "idea",
+        "intellij",
+        "phpstorm",
+        "pycharm",
+        "rider",
+        "rubymine",
+        "webstorm",
+        "windsurf",
+        "zed",
+        "vscodium",
     ]
 
     private static let curatedBundleMetadata: [String: MatchMetadata] = [
         "com.microsoft.VSCode": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 10),
         "com.microsoft.VSCodeInsiders": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 11),
-        "com.todesktop.230313mzl4w4u92": .init(symbolName: "cursorarrow.click.2", rank: 12),
-        "dev.zed.Zed": .init(symbolName: "bolt.horizontal", rank: 13),
-        "com.exafunction.windsurf": .init(symbolName: "wind", rank: 14),
-        "com.vscodium": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 15),
-        "com.openai.codex": .init(symbolName: "sparkles.rectangle.stack", rank: 16),
-        "ai.opencode.desktop": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 17),
-        "com.apple.dt.Xcode": .init(symbolName: "hammer", rank: 18),
-        "com.jetbrains.PhpStorm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 19),
-        "com.jetbrains.WebStorm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 20),
-        "com.jetbrains.PyCharm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 21),
-        "com.jetbrains.IntelliJ-IDEA": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 22),
-        "com.jetbrains.CLion": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 23),
-        "com.jetbrains.GoLand": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 24),
-        "com.jetbrains.RubyMine": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 25),
-        "com.jetbrains.DataGrip": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 26),
-        "com.jetbrains.Rider": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 27),
-        "com.jetbrainsFleet": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 28),
-        "com.google.antigravity": .init(symbolName: "sparkles", rank: 29),
-        "com.jcode.launcher": .init(symbolName: "terminal", rank: 30),
-        "com.panic.Nova": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 31),
-        "com.sublimetext.4": .init(symbolName: "text.cursor", rank: 32),
-        "com.barebones.bbedit": .init(symbolName: "text.cursor", rank: 33),
-        "com.macromates.TextMate": .init(symbolName: "text.cursor", rank: 34),
+        "com.vscodium": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 12),
+        "com.todesktop.230313mzl4w4u92": .init(symbolName: "cursorarrow.click.2", rank: 13),
+        "dev.zed.Zed": .init(symbolName: "bolt.horizontal", rank: 14),
+        "com.exafunction.windsurf": .init(symbolName: "wind", rank: 15),
+        "com.apple.dt.Xcode": .init(symbolName: "hammer", rank: 16),
+        "com.jetbrains.PhpStorm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 17),
+        "com.jetbrains.WebStorm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 18),
+        "com.jetbrains.PyCharm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 19),
+        "com.jetbrains.IntelliJ-IDEA": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 20),
+        "com.jetbrains.CLion": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 21),
+        "com.jetbrains.GoLand": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 22),
+        "com.jetbrains.RubyMine": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 23),
+        "com.jetbrains.DataGrip": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 24),
+        "com.jetbrains.Rider": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 25),
+        "com.jetbrainsFleet": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 26),
+        "com.panic.Nova": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 27),
+        "com.sublimetext.4": .init(symbolName: "text.cursor", rank: 28),
+        "com.barebones.bbedit": .init(symbolName: "text.cursor", rank: 29),
+        "com.macromates.TextMate": .init(symbolName: "text.cursor", rank: 30),
+        "com.openai.codex": .init(symbolName: "sparkles.rectangle.stack", rank: 80),
+        "ai.opencode.desktop": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 81),
+        "com.google.antigravity": .init(symbolName: "sparkles", rank: 82),
+        "com.jcode.launcher": .init(symbolName: "terminal", rank: 83),
+        "com.jetbrains.air": .init(symbolName: "sparkles", rank: 84),
     ]
 
     private static let editorLikeNameFragments: [String] = [
@@ -367,6 +521,7 @@ final class IDEIntegrationService: ObservableObject {
         "intellij",
         "idea",
         "android studio",
+        "air",
     ]
 
     private static let keywordMatches: [(keyword: String, symbolName: String, rank: Int)] = [
@@ -377,25 +532,33 @@ final class IDEIntegrationService: ObservableObject {
         ("cursor", "cursorarrow.click.2", 14),
         ("zed", "bolt.horizontal", 15),
         ("windsurf", "wind", 16),
-        ("codex", "sparkles.rectangle.stack", 17),
-        ("opencode", "chevron.left.forwardslash.chevron.right", 18),
-        ("xcode", "hammer", 19),
-        ("phpstorm", "chevron.left.forwardslash.chevron.right", 20),
-        ("webstorm", "chevron.left.forwardslash.chevron.right", 21),
-        ("pycharm", "chevron.left.forwardslash.chevron.right", 22),
-        ("rubymine", "chevron.left.forwardslash.chevron.right", 23),
-        ("clion", "chevron.left.forwardslash.chevron.right", 24),
-        ("goland", "chevron.left.forwardslash.chevron.right", 25),
-        ("datagrip", "chevron.left.forwardslash.chevron.right", 26),
-        ("rider", "chevron.left.forwardslash.chevron.right", 27),
-        ("fleet", "chevron.left.forwardslash.chevron.right", 28),
-        ("intellij", "chevron.left.forwardslash.chevron.right", 29),
-        ("android studio", "chevron.left.forwardslash.chevron.right", 30),
-        ("nova", "chevron.left.forwardslash.chevron.right", 31),
-        ("sublime text", "text.cursor", 32),
-        ("bbedit", "text.cursor", 33),
-        ("textmate", "text.cursor", 34),
-        ("antigravity", "sparkles", 35),
-        ("jcode", "terminal", 36),
+        ("xcode", "hammer", 17),
+        ("phpstorm", "chevron.left.forwardslash.chevron.right", 18),
+        ("webstorm", "chevron.left.forwardslash.chevron.right", 19),
+        ("pycharm", "chevron.left.forwardslash.chevron.right", 20),
+        ("rubymine", "chevron.left.forwardslash.chevron.right", 21),
+        ("clion", "chevron.left.forwardslash.chevron.right", 22),
+        ("goland", "chevron.left.forwardslash.chevron.right", 23),
+        ("datagrip", "chevron.left.forwardslash.chevron.right", 24),
+        ("rider", "chevron.left.forwardslash.chevron.right", 25),
+        ("fleet", "chevron.left.forwardslash.chevron.right", 26),
+        ("intellij", "chevron.left.forwardslash.chevron.right", 27),
+        ("android studio", "chevron.left.forwardslash.chevron.right", 28),
+        ("nova", "chevron.left.forwardslash.chevron.right", 29),
+        ("sublime text", "text.cursor", 30),
+        ("bbedit", "text.cursor", 31),
+        ("textmate", "text.cursor", 32),
+        ("codex", "sparkles.rectangle.stack", 80),
+        ("opencode", "chevron.left.forwardslash.chevron.right", 81),
+        ("antigravity", "sparkles", 82),
+        ("jcode", "terminal", 83),
+        ("air", "sparkles", 84),
     ]
+
+    private enum LaunchStrategy {
+        case generic
+        case vscodeLike(commandNames: [String])
+        case zed(commandNames: [String])
+        case jetbrains(commandNames: [String])
+    }
 }

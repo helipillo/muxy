@@ -31,8 +31,8 @@ struct IDEIntegrationServiceTests {
         #expect(resolved?.bundleIdentifier == zed.bundleIdentifier)
     }
 
-    @Test("launchArguments uses vscode goto strategy when supported")
-    func launchArgumentsUsesVSCodeGotoStrategyWhenSupported() {
+    @Test("launchCommands uses vscode CLI goto strategy when available")
+    func launchCommandsUsesVSCodeCLIGotoStrategyWhenAvailable() {
         let ide = IDEIntegrationService.IDEApplication(
             bundleIdentifier: "com.microsoft.VSCode",
             displayName: "VS Code",
@@ -46,24 +46,87 @@ struct IDEIntegrationServiceTests {
             column: 7
         )
 
-        let arguments = IDEIntegrationService.launchArguments(
+        let commands = IDEIntegrationService.launchCommands(
             for: ide,
             projectPath: "/tmp/repo",
-            editorLocation: location
+            editorLocation: location,
+            availableCLICommands: ["code": "/usr/local/bin/code"]
         )
 
-        #expect(arguments == [
-            "-a",
-            "/Applications/Visual Studio Code.app",
-            "--args",
-            "/tmp/repo",
-            "--goto",
-            "/tmp/repo/Sources/App.swift:12:7",
+        #expect(commands == [
+            .init(
+                executablePath: "/usr/local/bin/code",
+                arguments: ["/tmp/repo", "--goto", "/tmp/repo/Sources/App.swift:12:7"]
+            ),
         ])
     }
 
-    @Test("launchArguments falls back to generic project and file opening")
-    func launchArgumentsFallsBackToGenericProjectAndFileOpening() {
+    @Test("launchCommands uses zed CLI when available")
+    func launchCommandsUsesZedCLIWhenAvailable() {
+        let ide = IDEIntegrationService.IDEApplication(
+            bundleIdentifier: "dev.zed.Zed",
+            displayName: "Zed",
+            appURL: URL(fileURLWithPath: "/Applications/Zed.app"),
+            symbolName: "bolt.horizontal",
+            rank: 14
+        )
+        let location = IDEIntegrationService.EditorLocation(
+            filePath: "/tmp/repo/Sources/App.swift",
+            line: 12,
+            column: 7
+        )
+
+        let commands = IDEIntegrationService.launchCommands(
+            for: ide,
+            projectPath: "/tmp/repo",
+            editorLocation: location,
+            availableCLICommands: ["zed": "/usr/local/bin/zed"]
+        )
+
+        #expect(commands == [
+            .init(
+                executablePath: "/usr/local/bin/zed",
+                arguments: ["/tmp/repo", "/tmp/repo/Sources/App.swift:12:7"]
+            ),
+        ])
+    }
+
+    @Test("launchCommands opens JetBrains project then focused file when launcher is available")
+    func launchCommandsOpensJetBrainsProjectThenFocusedFileWhenLauncherIsAvailable() {
+        let ide = IDEIntegrationService.IDEApplication(
+            bundleIdentifier: "com.jetbrains.PhpStorm",
+            displayName: "PhpStorm",
+            appURL: URL(fileURLWithPath: "/Applications/PhpStorm.app"),
+            symbolName: "chevron.left.forwardslash.chevron.right",
+            rank: 17
+        )
+        let location = IDEIntegrationService.EditorLocation(
+            filePath: "/tmp/repo/Sources/App.swift",
+            line: 12,
+            column: 7
+        )
+
+        let commands = IDEIntegrationService.launchCommands(
+            for: ide,
+            projectPath: "/tmp/repo",
+            editorLocation: location,
+            availableCLICommands: ["phpstorm": "/usr/local/bin/phpstorm"]
+        )
+
+        #expect(commands == [
+            .init(
+                executablePath: "/usr/bin/open",
+                arguments: ["-a", "/Applications/PhpStorm.app", "/tmp/repo"]
+            ),
+            .init(
+                executablePath: "/usr/local/bin/phpstorm",
+                arguments: ["--line", "12", "--column", "7", "/tmp/repo/Sources/App.swift"]
+            ),
+        ])
+    }
+
+    @Test("launchCommands falls back to generic project and file opening")
+    func launchCommandsFallsBackToGenericProjectAndFileOpening() {
         let ide = IDEIntegrationService.IDEApplication(
             bundleIdentifier: "com.jetbrains.PhpStorm",
             displayName: "PhpStorm",
@@ -77,17 +140,18 @@ struct IDEIntegrationServiceTests {
             column: 7
         )
 
-        let arguments = IDEIntegrationService.launchArguments(
+        let commands = IDEIntegrationService.launchCommands(
             for: ide,
             projectPath: "/tmp/repo",
-            editorLocation: location
+            editorLocation: location,
+            availableCLICommands: [:]
         )
 
-        #expect(arguments == [
-            "-a",
-            "/Applications/PhpStorm.app",
-            "/tmp/repo",
-            "/tmp/repo/Sources/App.swift",
+        #expect(commands == [
+            .init(
+                executablePath: "/usr/bin/open",
+                arguments: ["-a", "/Applications/PhpStorm.app", "/tmp/repo", "/tmp/repo/Sources/App.swift"]
+            ),
         ])
     }
 
@@ -178,15 +242,22 @@ struct IDEIntegrationServiceTests {
         #expect(IDEIntegrationService.ideApplication(from: metadata) == nil)
     }
 
-    @Test("sort prioritizes curated IDE ranks before alphabetical order")
-    func sortPrioritizesCuratedRanks() {
+    @Test("sort prioritizes IDEs before AI companion apps")
+    func sortPrioritizesIDEsBeforeAICompanionApps() {
         let apps = [
+            IDEIntegrationService.IDEApplication(
+                bundleIdentifier: "com.jetbrains.air",
+                displayName: "Air",
+                appURL: URL(fileURLWithPath: "/Applications/Air.app"),
+                symbolName: "sparkles",
+                rank: 84
+            ),
             IDEIntegrationService.IDEApplication(
                 bundleIdentifier: "com.jetbrains.PhpStorm",
                 displayName: "PhpStorm",
                 appURL: URL(fileURLWithPath: "/Applications/PhpStorm.app"),
                 symbolName: "chevron.left.forwardslash.chevron.right",
-                rank: 19
+                rank: 17
             ),
             IDEIntegrationService.IDEApplication(
                 bundleIdentifier: "com.microsoft.VSCode",
@@ -200,12 +271,12 @@ struct IDEIntegrationServiceTests {
                 displayName: "Antigravity",
                 appURL: URL(fileURLWithPath: "/Applications/Antigravity.app"),
                 symbolName: "sparkles",
-                rank: 35
+                rank: 82
             ),
         ]
 
         let sorted = apps.sorted(by: IDEIntegrationService.compareInstalledApps)
 
-        #expect(sorted.map(\.displayName) == ["VS Code", "PhpStorm", "Antigravity"])
+        #expect(sorted.map(\.displayName) == ["VS Code", "PhpStorm", "Antigravity", "Air"])
     }
 }

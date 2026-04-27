@@ -63,6 +63,10 @@ struct PaneTabStrip: View {
             .frame(height: 32)
 
             HStack(spacing: 0) {
+                if showDevelopmentBadge {
+                    developmentBadge
+                        .padding(.trailing, 6)
+                }
                 if isWindowTitleBar {
                     OpenInIDEControl(
                         projectPath: openInIDEProjectPath,
@@ -70,10 +74,6 @@ struct PaneTabStrip: View {
                         line: openInIDELine,
                         column: openInIDEColumn
                     )
-                }
-                if showDevelopmentBadge {
-                    developmentBadge
-                        .padding(.trailing, 6)
                 }
                 if isWindowTitleBar, let version = UpdateService.shared.availableUpdateVersion {
                     UpdateBadge(version: version) {

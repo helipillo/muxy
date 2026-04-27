@@ -86,15 +86,11 @@ struct OpenInIDEControl: View {
             guard projectPath != nil else { return }
             showingMenu.toggle()
         } label: {
-            ZStack {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(hoveredMenu ? MuxyTheme.hover : .clear)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(menuForeground)
-            }
-            .frame(width: width, height: 24)
-            .contentShape(Rectangle())
+            Image(systemName: "chevron.down")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(menuForeground)
+                .frame(width: width, height: 24)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(projectPath == nil)
@@ -209,7 +205,7 @@ struct OpenInIDEControl: View {
         if projectPath == nil {
             return MuxyTheme.fgMuted.opacity(0.45)
         }
-        return hoveredMenu ? .white : MuxyTheme.fgMuted
+        return hoveredMenu ? MuxyTheme.fg : MuxyTheme.fgMuted
     }
 
     private func openDefaultIDE() {

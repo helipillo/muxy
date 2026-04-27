@@ -106,8 +106,8 @@ struct OpenInIDEControl: View {
                     Text("No supported IDEs found")
                         .font(.system(size: 12))
                         .foregroundStyle(MuxyTheme.fgMuted)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
                 } else {
                     if !editorApps.isEmpty {
                         menuSection(title: "Editors & IDEs", apps: editorApps)
@@ -117,20 +117,20 @@ struct OpenInIDEControl: View {
                     }
                 }
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
         }
-        .frame(width: menuPopoverWidth, height: min(CGFloat(max(installedApps.count, 1)) * 24 + 40, 280))
+        .frame(width: menuPopoverWidth, height: min(CGFloat(max(installedApps.count, 1)) * 24 + 34, 260))
         .background(MuxyTheme.bg)
     }
 
     @ViewBuilder
     private func menuSection(title: String, apps: [IDEIntegrationService.IDEApplication]) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 1) {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgMuted)
-                .padding(.horizontal, 10)
-                .padding(.top, 5)
+                .padding(.horizontal, 9)
+                .padding(.top, 4)
                 .padding(.bottom, 1)
 
             ForEach(apps) { ide in
@@ -151,8 +151,8 @@ struct OpenInIDEControl: View {
         ]
 
         let contentWidth = (appWidths + sectionWidths).max() ?? 0
-        let paddedWidth = contentWidth + 48
-        return min(max(220, paddedWidth), 380)
+        let paddedWidth = contentWidth + 34
+        return min(max(180, paddedWidth), 320)
     }
 
     private func textWidth(_ text: String, font: NSFont) -> CGFloat {
@@ -179,22 +179,14 @@ struct OpenInIDEControl: View {
     }
 
     private func menuButton(for ide: IDEIntegrationService.IDEApplication) -> some View {
-        Button {
-            showingMenu = false
-            open(ide)
-        } label: {
-            HStack(spacing: 7) {
-                AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 14)
-                Text(ide.displayName)
-                    .font(.system(size: 12))
+        IDEMenuRow(
+            ide: ide,
+            isDefault: ide.bundleIdentifier == defaultIDE?.bundleIdentifier,
+            action: {
+                showingMenu = false
+                open(ide)
             }
-            .foregroundStyle(MuxyTheme.fg)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        )
     }
 
     private var helpText: String {
@@ -238,5 +230,35 @@ struct OpenInIDEControl: View {
             column: column,
             in: ide
         )
+    }
+}
+
+@MainActor
+private struct IDEMenuRow: View {
+    let ide: IDEIntegrationService.IDEApplication
+    let isDefault: Bool
+    let action: () -> Void
+
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 14)
+                Text(ide.displayName)
+                    .font(.system(size: 12))
+                if isDefault {
+                    Spacer(minLength: 0)
+                }
+            }
+            .foregroundStyle(MuxyTheme.fg)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(hovered ? MuxyTheme.hover : .clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
     }
 }

@@ -117,12 +117,6 @@ struct OpenInIDEControl: View {
                 }
             }
         }
-
-        Divider()
-
-        Button("Refresh IDE List") {
-            ideService.refreshInstalledApps()
-        }
     }
 
     private var installedApps: [IDEIntegrationService.IDEApplication] {

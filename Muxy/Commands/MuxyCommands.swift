@@ -159,12 +159,6 @@ struct MuxyCommands: Commands {
                         }
                     }
                 }
-
-                Divider()
-
-                Button("Refresh IDE List") {
-                    ideService.refreshInstalledApps()
-                }
             }
             .disabled(activeProjectPath == nil)
 

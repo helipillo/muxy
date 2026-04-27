@@ -327,9 +327,9 @@ struct MainWindow: View {
                 showVCSButton: true,
                 showDevelopmentBadge: AppEnvironment.isDevelopment,
                 openInIDEProjectPath: activeWorktreePath(for: project),
-                openInIDEFilePath: activeEditorFilePath,
-                openInIDELine: activeEditorCursorLine,
-                openInIDEColumn: activeEditorCursorColumn,
+                openInIDEFilePath: area.activeTab?.content.editorState?.filePath,
+                openInIDELine: area.activeTab?.content.editorState?.cursorLine,
+                openInIDEColumn: area.activeTab?.content.editorState?.cursorColumn,
                 projectID: project.id,
                 onSelectTab: { tabID in
                     appState.dispatch(.selectTab(projectID: project.id, areaID: area.id, tabID: tabID))

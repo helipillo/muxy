@@ -8,14 +8,10 @@ struct AppBundleIconView: View {
     var size: CGFloat = 16
 
     var body: some View {
-        if let image = AppBundleIconCache.shared.image(for: appURL) {
+        if let image = AppBundleIconCache.shared.image(for: appURL, size: size) {
             Image(nsImage: image)
-                .resizable()
                 .interpolation(.high)
                 .antialiased(true)
-                .aspectRatio(contentMode: .fit)
-                .frame(width: size, height: size)
-                .clipped()
         } else {
             Image(systemName: fallbackSystemName)
                 .font(.system(size: size * 0.85, weight: .semibold))
@@ -31,14 +27,29 @@ private final class AppBundleIconCache {
 
     private let cache = NSCache<NSString, NSImage>()
 
-    func image(for appURL: URL) -> NSImage? {
-        let key = appURL.path as NSString
+    func image(for appURL: URL, size: CGFloat) -> NSImage? {
+        let pixelSize = max(1, Int(size.rounded()))
+        let key = "\(appURL.path)#\(pixelSize)" as NSString
         if let cached = cache.object(forKey: key) {
             return cached
         }
 
-        let image = NSWorkspace.shared.icon(forFile: appURL.path)
-        image.size = NSSize(width: 128, height: 128)
+        let source = NSWorkspace.shared.icon(forFile: appURL.path)
+        let targetSize = NSSize(width: pixelSize, height: pixelSize)
+        let image = NSImage(size: targetSize)
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        NSGraphicsContext.current?.imageInterpolation = .high
+        source.draw(
+            in: NSRect(origin: .zero, size: targetSize),
+            from: NSRect(origin: .zero, size: source.size),
+            operation: .sourceOver,
+            fraction: 1.0,
+            respectFlipped: true,
+            hints: [.interpolation: NSImageInterpolation.high]
+        )
+        image.size = targetSize
         cache.setObject(image, forKey: key)
         return image
     }

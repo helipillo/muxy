@@ -11,8 +11,11 @@ struct AppBundleIconView: View {
         if let image = AppBundleIconCache.shared.image(for: appURL) {
             Image(nsImage: image)
                 .resizable()
+                .interpolation(.high)
+                .antialiased(true)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: size, height: size)
+                .clipped()
         } else {
             Image(systemName: fallbackSystemName)
                 .font(.system(size: size * 0.85, weight: .semibold))

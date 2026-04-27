@@ -145,11 +145,7 @@ final class IDEIntegrationService: ObservableObject {
                 }
                 return [.init(executablePath: executablePath, arguments: args)]
             }
-            var fallbackArgs = ["-a", ide.appURL.path, "--args", projectPath]
-            if let editorLocation {
-                fallbackArgs += ["--goto", vscodeGotoTarget(for: editorLocation)]
-            }
-            return [.init(executablePath: "/usr/bin/open", arguments: fallbackArgs)]
+            return [genericOpenCommand(for: ide, projectPath: projectPath, filePath: editorLocation?.filePath)]
 
         case let .zed(commandNames):
             if let executablePath = resolveCLIPath(commandNames: commandNames, availableCLICommands: availableCLICommands) {
@@ -354,8 +350,14 @@ final class IDEIntegrationService: ObservableObject {
             .split(separator: ":")
             .map(String.init)
             .filter { !$0.isEmpty }
+        let searchDirectories = Array(NSOrderedSet(array: pathDirectories + [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+        ])) as? [String] ?? pathDirectories
 
-        for directory in pathDirectories {
+        for directory in searchDirectories {
             let candidate = URL(fileURLWithPath: directory).appendingPathComponent(commandName).path
             if FileManager.default.isExecutableFile(atPath: candidate) {
                 return candidate

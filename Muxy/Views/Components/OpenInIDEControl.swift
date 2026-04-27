@@ -16,10 +16,9 @@ struct OpenInIDEControl: View {
                 Button {
                     open(defaultIDE)
                 } label: {
-                    Label {
+                    HStack(spacing: 8) {
+                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 14)
                         Text("Open in \(defaultIDE.displayName)")
-                    } icon: {
-                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName)
                     }
                 }
             }
@@ -31,12 +30,9 @@ struct OpenInIDEControl: View {
                     Button {
                         open(ide)
                     } label: {
-                        HStack {
-                            Label {
-                                Text(ide.displayName)
-                            } icon: {
-                                AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName)
-                            }
+                        HStack(spacing: 8) {
+                            AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 14)
+                            Text(ide.displayName)
                             if ide.bundleIdentifier == defaultIDE?.bundleIdentifier {
                                 Spacer()
                                 Text("Default")
@@ -81,27 +77,20 @@ struct OpenInIDEControl: View {
     @ViewBuilder
     private var label: some View {
         if compact {
-            Group {
-                if let defaultIDE {
-                    AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 16)
-                } else {
-                    Image(systemName: "chevron.left.forwardslash.chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(MuxyTheme.fgMuted)
-                }
-            }
+            Image(systemName: "chevron.left.forwardslash.chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(MuxyTheme.fgMuted)
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
                 .accessibilityLabel(helpText)
         } else {
-            Label {
-                Text(defaultIDE.map { "Open in \($0.displayName)" } ?? "Open in IDE")
-            } icon: {
+            HStack(spacing: 8) {
                 if let defaultIDE {
-                    AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 16)
+                    AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 14)
                 } else {
                     Image(systemName: "chevron.left.forwardslash.chevron.right")
                 }
+                Text(defaultIDE.map { "Open in \($0.displayName)" } ?? "Open in IDE")
             }
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgMuted)

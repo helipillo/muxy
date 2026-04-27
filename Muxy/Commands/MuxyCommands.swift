@@ -27,6 +27,11 @@ struct MuxyCommands: Commands {
             ?? project.path
     }
 
+    private var activeEditorFilePath: String? {
+        guard let project = activeProject else { return nil }
+        return appState.activeTab(for: project.id)?.content.editorState?.filePath
+    }
+
     private var shortcutDispatcher: ShortcutActionDispatcher {
         ShortcutActionDispatcher(
             appState: appState,
@@ -103,7 +108,7 @@ struct MuxyCommands: Commands {
             if let defaultIDE = ideService.defaultIDE {
                 Button("Open in \(defaultIDE.displayName)") {
                     guard let activeProjectPath else { return }
-                    _ = ideService.openProject(at: activeProjectPath, in: defaultIDE)
+                    _ = ideService.openProject(at: activeProjectPath, highlightingFileAt: activeEditorFilePath, in: defaultIDE)
                 }
                 .disabled(activeProjectPath == nil)
             }
@@ -116,7 +121,7 @@ struct MuxyCommands: Commands {
                     ForEach(ideService.installedApps) { ide in
                         Button(ide.displayName) {
                             guard let activeProjectPath else { return }
-                            _ = ideService.openProject(at: activeProjectPath, in: ide)
+                            _ = ideService.openProject(at: activeProjectPath, highlightingFileAt: activeEditorFilePath, in: ide)
                         }
                     }
                 }

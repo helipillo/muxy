@@ -84,12 +84,16 @@ final class IDEIntegrationService: ObservableObject {
     }
 
     @discardableResult
-    func openProject(at path: String, in ide: IDEApplication? = nil) -> Bool {
+    func openProject(
+        at path: String,
+        highlightingFileAt filePath: String? = nil,
+        in ide: IDEApplication? = nil
+    ) -> Bool {
         guard let app = ide ?? defaultIDE else { return false }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-a", app.appURL.path, path]
+        process.arguments = ["-a", app.appURL.path] + Self.openTargetArguments(projectPath: path, filePath: filePath)
 
         do {
             try process.run()
@@ -101,6 +105,19 @@ final class IDEIntegrationService: ObservableObject {
         guard process.terminationStatus == 0 else { return false }
         defaults.set(app.bundleIdentifier, forKey: Self.selectedBundleIdentifierKey)
         return true
+    }
+
+    static func openTargetArguments(projectPath: String, filePath: String?) -> [String] {
+        var orderedPaths = [projectPath]
+
+        if let filePath,
+           !filePath.isEmpty,
+           filePath != projectPath,
+           !orderedPaths.contains(filePath) {
+            orderedPaths.append(filePath)
+        }
+
+        return orderedPaths
     }
 
     static func resolveDefaultIDE(

@@ -31,6 +31,23 @@ struct IDEIntegrationServiceTests {
         #expect(resolved?.bundleIdentifier == zed.bundleIdentifier)
     }
 
+    @Test("openTargetArguments includes project and focused file once")
+    func openTargetArgumentsIncludesProjectAndFocusedFileOnce() {
+        let arguments = IDEIntegrationService.openTargetArguments(
+            projectPath: "/tmp/repo",
+            filePath: "/tmp/repo/Sources/App.swift"
+        )
+
+        #expect(arguments == ["/tmp/repo", "/tmp/repo/Sources/App.swift"])
+    }
+
+    @Test("openTargetArguments omits duplicate or empty focused file")
+    func openTargetArgumentsOmitsDuplicateOrEmptyFocusedFile() {
+        #expect(IDEIntegrationService.openTargetArguments(projectPath: "/tmp/repo", filePath: "/tmp/repo") == ["/tmp/repo"])
+        #expect(IDEIntegrationService.openTargetArguments(projectPath: "/tmp/repo", filePath: nil) == ["/tmp/repo"])
+        #expect(IDEIntegrationService.openTargetArguments(projectPath: "/tmp/repo", filePath: "") == ["/tmp/repo"])
+    }
+
     @Test("resolveDefaultIDE falls back to first installed IDE when selection is missing")
     func resolveDefaultIDEFallsBackToFirstInstalled() {
         let vscode = IDEIntegrationService.IDEApplication(

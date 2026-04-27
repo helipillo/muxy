@@ -327,6 +327,7 @@ struct MainWindow: View {
                 showVCSButton: true,
                 showDevelopmentBadge: AppEnvironment.isDevelopment,
                 openInIDEProjectPath: activeWorktreePath(for: project),
+                openInIDEFilePath: activeEditorFilePath,
                 projectID: project.id,
                 onSelectTab: { tabID in
                     appState.dispatch(.selectTab(projectID: project.id, areaID: area.id, tabID: tabID))
@@ -386,7 +387,7 @@ struct MainWindow: View {
                 .overlay(alignment: .trailing) {
                     HStack(spacing: 0) {
                         if let project = activeProject {
-                            OpenInIDEControl(projectPath: activeWorktreePath(for: project))
+                            OpenInIDEControl(projectPath: activeWorktreePath(for: project), filePath: activeEditorFilePath)
                         }
                         if AppEnvironment.isDevelopment {
                             devModeBadge

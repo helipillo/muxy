@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct OpenInIDEControl: View {
     let projectPath: String?
+    let filePath: String?
     var compact = true
 
     @ObservedObject private var ideService = IDEIntegrationService.shared
@@ -87,6 +88,6 @@ struct OpenInIDEControl: View {
 
     private func open(_ ide: IDEIntegrationService.IDEApplication) {
         guard let projectPath else { return }
-        _ = ideService.openProject(at: projectPath, in: ide)
+        _ = ideService.openProject(at: projectPath, highlightingFileAt: filePath, in: ide)
     }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @MainActor
@@ -118,7 +119,7 @@ struct OpenInIDEControl: View {
             }
             .padding(.vertical, 6)
         }
-        .frame(width: 280, height: min(CGFloat(max(installedApps.count, 1)) * 24 + 40, 280))
+        .frame(width: menuPopoverWidth, height: min(CGFloat(max(installedApps.count, 1)) * 24 + 40, 280))
         .background(MuxyTheme.bg)
     }
 
@@ -136,6 +137,27 @@ struct OpenInIDEControl: View {
                 menuButton(for: ide)
             }
         }
+    }
+
+    private var menuPopoverWidth: CGFloat {
+        let rowFont = NSFont.systemFont(ofSize: 12)
+        let sectionFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
+
+        let appWidths = installedApps.map { textWidth($0.displayName, font: rowFont) }
+        let sectionWidths = [
+            textWidth("Editors & IDEs", font: sectionFont),
+            textWidth("Other Tools", font: sectionFont),
+            textWidth("No supported IDEs found", font: rowFont),
+        ]
+
+        let contentWidth = (appWidths + sectionWidths).max() ?? 0
+        let paddedWidth = contentWidth + 48
+        return min(max(220, paddedWidth), 380)
+    }
+
+    private func textWidth(_ text: String, font: NSFont) -> CGFloat {
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
+        return ceil((text as NSString).size(withAttributes: attributes).width)
     }
 
     private var installedApps: [IDEIntegrationService.IDEApplication] {

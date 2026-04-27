@@ -6,11 +6,17 @@ final class IDEIntegrationService: ObservableObject {
     static let shared = IDEIntegrationService()
 
     struct IDEApplication: Identifiable, Hashable {
+        enum Group: Int, Hashable {
+            case editor
+            case otherTool
+        }
+
         let bundleIdentifier: String
         let displayName: String
         let appURL: URL
         let symbolName: String
         let rank: Int
+        let group: Group
 
         var id: String {
             bundleIdentifier.isEmpty ? appURL.path : bundleIdentifier
@@ -34,6 +40,7 @@ final class IDEIntegrationService: ObservableObject {
     struct MatchMetadata: Hashable {
         let symbolName: String
         let rank: Int
+        let group: IDEApplication.Group
     }
 
     struct LaunchCommand: Hashable {
@@ -157,26 +164,8 @@ final class IDEIntegrationService: ObservableObject {
             }
             return [genericOpenCommand(for: ide, projectPath: projectPath, filePath: editorLocation?.filePath)]
 
-        case let .jetbrains(commandNames):
-            let projectCommand = genericOpenCommand(for: ide, projectPath: projectPath, filePath: nil)
-            guard let editorLocation,
-                  let executablePath = resolveCLIPath(commandNames: commandNames, availableCLICommands: availableCLICommands)
-            else {
-                if let editorLocation {
-                    return [genericOpenCommand(for: ide, projectPath: projectPath, filePath: editorLocation.filePath)]
-                }
-                return [projectCommand]
-            }
-
-            let fileCommand = LaunchCommand(
-                executablePath: executablePath,
-                arguments: [
-                    "--line", String(max(1, editorLocation.line)),
-                    "--column", String(max(1, editorLocation.column)),
-                    editorLocation.filePath,
-                ]
-            )
-            return [projectCommand, fileCommand]
+        case .jetbrains:
+            return [genericOpenCommand(for: ide, projectPath: projectPath, filePath: editorLocation?.filePath)]
 
         case .generic:
             return [genericOpenCommand(for: ide, projectPath: projectPath, filePath: editorLocation?.filePath)]
@@ -224,7 +213,8 @@ final class IDEIntegrationService: ObservableObject {
             displayName: metadata.displayName,
             appURL: metadata.appURL,
             symbolName: match.symbolName,
-            rank: match.rank
+            rank: match.rank,
+            group: match.group
         )
     }
 
@@ -246,24 +236,28 @@ final class IDEIntegrationService: ObservableObject {
 
         if loweredIdentifier.hasPrefix("com.jetbrains."),
            !loweredName.contains("toolbox") {
-            return MatchMetadata(symbolName: jetbrainsLikeSymbolName(for: loweredIdentifier), rank: 40)
+            return MatchMetadata(
+                symbolName: jetbrainsLikeSymbolName(for: loweredIdentifier),
+                rank: 40,
+                group: aiCompanionBundleIdentifiers.contains(loweredIdentifier) ? .otherTool : .editor
+            )
         }
 
         if let keywordMatch = keywordMatches.first(where: { containsKeyword($0.keyword, in: haystack) }) {
-            return MatchMetadata(symbolName: keywordMatch.symbolName, rank: keywordMatch.rank)
+            return MatchMetadata(symbolName: keywordMatch.symbolName, rank: keywordMatch.rank, group: keywordMatch.group)
         }
 
         if metadata.category == developerToolsCategory,
            editorLikeNameFragments.contains(where: { containsKeyword($0, in: loweredName) || containsKeyword($0, in: loweredExecutable) }) {
-            return MatchMetadata(symbolName: "chevron.left.forwardslash.chevron.right", rank: 90)
+            return MatchMetadata(symbolName: "chevron.left.forwardslash.chevron.right", rank: 90, group: .editor)
         }
 
         return nil
     }
 
     static func compareInstalledApps(_ lhs: IDEApplication, _ rhs: IDEApplication) -> Bool {
-        if lhs.rank != rhs.rank {
-            return lhs.rank < rhs.rank
+        if lhs.group != rhs.group {
+            return lhs.group.rawValue < rhs.group.rawValue
         }
         let nameOrder = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
         if nameOrder != .orderedSame {
@@ -386,8 +380,8 @@ final class IDEIntegrationService: ObservableObject {
         if let commandNames = zedLikeBundleIdentifiers[bundleIdentifier] {
             return .zed(commandNames: commandNames)
         }
-        if let commandNames = jetbrainsCLICommandNames[bundleIdentifier] {
-            return .jetbrains(commandNames: commandNames)
+        if let commandNames = jetbrainsCLICommandNames[bundleIdentifier], !commandNames.isEmpty {
+            return .jetbrains
         }
         return .generic
     }
@@ -466,32 +460,32 @@ final class IDEIntegrationService: ObservableObject {
     ]
 
     private static let curatedBundleMetadata: [String: MatchMetadata] = [
-        "com.microsoft.VSCode": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 10),
-        "com.microsoft.VSCodeInsiders": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 11),
-        "com.vscodium": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 12),
-        "com.todesktop.230313mzl4w4u92": .init(symbolName: "cursorarrow.click.2", rank: 13),
-        "dev.zed.Zed": .init(symbolName: "bolt.horizontal", rank: 14),
-        "com.exafunction.windsurf": .init(symbolName: "wind", rank: 15),
-        "com.apple.dt.Xcode": .init(symbolName: "hammer", rank: 16),
-        "com.jetbrains.PhpStorm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 17),
-        "com.jetbrains.WebStorm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 18),
-        "com.jetbrains.PyCharm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 19),
-        "com.jetbrains.IntelliJ-IDEA": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 20),
-        "com.jetbrains.CLion": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 21),
-        "com.jetbrains.GoLand": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 22),
-        "com.jetbrains.RubyMine": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 23),
-        "com.jetbrains.DataGrip": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 24),
-        "com.jetbrains.Rider": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 25),
-        "com.jetbrainsFleet": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 26),
-        "com.panic.Nova": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 27),
-        "com.sublimetext.4": .init(symbolName: "text.cursor", rank: 28),
-        "com.barebones.bbedit": .init(symbolName: "text.cursor", rank: 29),
-        "com.macromates.TextMate": .init(symbolName: "text.cursor", rank: 30),
-        "com.openai.codex": .init(symbolName: "sparkles.rectangle.stack", rank: 80),
-        "ai.opencode.desktop": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 81),
-        "com.google.antigravity": .init(symbolName: "sparkles", rank: 82),
-        "com.jcode.launcher": .init(symbolName: "terminal", rank: 83),
-        "com.jetbrains.air": .init(symbolName: "sparkles", rank: 84),
+        "com.microsoft.VSCode": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 10, group: .editor),
+        "com.microsoft.VSCodeInsiders": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 11, group: .editor),
+        "com.vscodium": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 12, group: .editor),
+        "com.todesktop.230313mzl4w4u92": .init(symbolName: "cursorarrow.click.2", rank: 13, group: .editor),
+        "dev.zed.Zed": .init(symbolName: "bolt.horizontal", rank: 14, group: .editor),
+        "com.exafunction.windsurf": .init(symbolName: "wind", rank: 15, group: .editor),
+        "com.apple.dt.Xcode": .init(symbolName: "hammer", rank: 16, group: .editor),
+        "com.jetbrains.PhpStorm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 17, group: .editor),
+        "com.jetbrains.WebStorm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 18, group: .editor),
+        "com.jetbrains.PyCharm": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 19, group: .editor),
+        "com.jetbrains.IntelliJ-IDEA": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 20, group: .editor),
+        "com.jetbrains.CLion": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 21, group: .editor),
+        "com.jetbrains.GoLand": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 22, group: .editor),
+        "com.jetbrains.RubyMine": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 23, group: .editor),
+        "com.jetbrains.DataGrip": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 24, group: .editor),
+        "com.jetbrains.Rider": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 25, group: .editor),
+        "com.jetbrainsFleet": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 26, group: .editor),
+        "com.panic.Nova": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 27, group: .editor),
+        "com.sublimetext.4": .init(symbolName: "text.cursor", rank: 28, group: .editor),
+        "com.barebones.bbedit": .init(symbolName: "text.cursor", rank: 29, group: .editor),
+        "com.macromates.TextMate": .init(symbolName: "text.cursor", rank: 30, group: .editor),
+        "com.openai.codex": .init(symbolName: "sparkles.rectangle.stack", rank: 80, group: .otherTool),
+        "ai.opencode.desktop": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 81, group: .otherTool),
+        "com.google.antigravity": .init(symbolName: "sparkles", rank: 82, group: .otherTool),
+        "com.jcode.launcher": .init(symbolName: "terminal", rank: 83, group: .otherTool),
+        "com.jetbrains.air": .init(symbolName: "sparkles", rank: 84, group: .otherTool),
     ]
 
     private static let editorLikeNameFragments: [String] = [
@@ -526,41 +520,41 @@ final class IDEIntegrationService: ObservableObject {
         "air",
     ]
 
-    private static let keywordMatches: [(keyword: String, symbolName: String, rank: Int)] = [
-        ("visual studio code", "chevron.left.forwardslash.chevron.right", 10),
-        ("vscode", "chevron.left.forwardslash.chevron.right", 11),
-        ("code - insiders", "chevron.left.forwardslash.chevron.right", 12),
-        ("vscodium", "chevron.left.forwardslash.chevron.right", 13),
-        ("cursor", "cursorarrow.click.2", 14),
-        ("zed", "bolt.horizontal", 15),
-        ("windsurf", "wind", 16),
-        ("xcode", "hammer", 17),
-        ("phpstorm", "chevron.left.forwardslash.chevron.right", 18),
-        ("webstorm", "chevron.left.forwardslash.chevron.right", 19),
-        ("pycharm", "chevron.left.forwardslash.chevron.right", 20),
-        ("rubymine", "chevron.left.forwardslash.chevron.right", 21),
-        ("clion", "chevron.left.forwardslash.chevron.right", 22),
-        ("goland", "chevron.left.forwardslash.chevron.right", 23),
-        ("datagrip", "chevron.left.forwardslash.chevron.right", 24),
-        ("rider", "chevron.left.forwardslash.chevron.right", 25),
-        ("fleet", "chevron.left.forwardslash.chevron.right", 26),
-        ("intellij", "chevron.left.forwardslash.chevron.right", 27),
-        ("android studio", "chevron.left.forwardslash.chevron.right", 28),
-        ("nova", "chevron.left.forwardslash.chevron.right", 29),
-        ("sublime text", "text.cursor", 30),
-        ("bbedit", "text.cursor", 31),
-        ("textmate", "text.cursor", 32),
-        ("codex", "sparkles.rectangle.stack", 80),
-        ("opencode", "chevron.left.forwardslash.chevron.right", 81),
-        ("antigravity", "sparkles", 82),
-        ("jcode", "terminal", 83),
-        ("air", "sparkles", 84),
+    private static let keywordMatches: [(keyword: String, symbolName: String, rank: Int, group: IDEApplication.Group)] = [
+        ("visual studio code", "chevron.left.forwardslash.chevron.right", 10, .editor),
+        ("vscode", "chevron.left.forwardslash.chevron.right", 11, .editor),
+        ("code - insiders", "chevron.left.forwardslash.chevron.right", 12, .editor),
+        ("vscodium", "chevron.left.forwardslash.chevron.right", 13, .editor),
+        ("cursor", "cursorarrow.click.2", 14, .editor),
+        ("zed", "bolt.horizontal", 15, .editor),
+        ("windsurf", "wind", 16, .editor),
+        ("xcode", "hammer", 17, .editor),
+        ("phpstorm", "chevron.left.forwardslash.chevron.right", 18, .editor),
+        ("webstorm", "chevron.left.forwardslash.chevron.right", 19, .editor),
+        ("pycharm", "chevron.left.forwardslash.chevron.right", 20, .editor),
+        ("rubymine", "chevron.left.forwardslash.chevron.right", 21, .editor),
+        ("clion", "chevron.left.forwardslash.chevron.right", 22, .editor),
+        ("goland", "chevron.left.forwardslash.chevron.right", 23, .editor),
+        ("datagrip", "chevron.left.forwardslash.chevron.right", 24, .editor),
+        ("rider", "chevron.left.forwardslash.chevron.right", 25, .editor),
+        ("fleet", "chevron.left.forwardslash.chevron.right", 26, .editor),
+        ("intellij", "chevron.left.forwardslash.chevron.right", 27, .editor),
+        ("android studio", "chevron.left.forwardslash.chevron.right", 28, .editor),
+        ("nova", "chevron.left.forwardslash.chevron.right", 29, .editor),
+        ("sublime text", "text.cursor", 30, .editor),
+        ("bbedit", "text.cursor", 31, .editor),
+        ("textmate", "text.cursor", 32, .editor),
+        ("codex", "sparkles.rectangle.stack", 80, .otherTool),
+        ("opencode", "chevron.left.forwardslash.chevron.right", 81, .otherTool),
+        ("antigravity", "sparkles", 82, .otherTool),
+        ("jcode", "terminal", 83, .otherTool),
+        ("air", "sparkles", 84, .otherTool),
     ]
 
     private enum LaunchStrategy {
         case generic
         case vscodeLike(commandNames: [String])
         case zed(commandNames: [String])
-        case jetbrains(commandNames: [String])
+        case jetbrains
     }
 }

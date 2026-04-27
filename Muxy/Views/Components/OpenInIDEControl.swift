@@ -50,7 +50,7 @@ struct OpenInIDEControl: View {
                     .foregroundStyle(menuForeground)
                     .frame(width: 14, height: 24)
                     .contentShape(Rectangle())
-                    .background(hoveredMenu ? MuxyTheme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
+                    .background(hoveredMenu ? MuxyTheme.hover.opacity(1.0) : .clear, in: RoundedRectangle(cornerRadius: 5))
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -92,7 +92,7 @@ struct OpenInIDEControl: View {
                     .foregroundStyle(menuForeground)
                     .frame(width: 18, height: 24)
                     .contentShape(Rectangle())
-                    .background(hoveredMenu ? MuxyTheme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
+                    .background(hoveredMenu ? MuxyTheme.hover.opacity(1.0) : .clear, in: RoundedRectangle(cornerRadius: 5))
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -108,17 +108,18 @@ struct OpenInIDEControl: View {
             Button("No supported IDEs found") {}
                 .disabled(true)
         } else {
-            ForEach(installedApps) { ide in
-                Button {
-                    open(ide)
-                } label: {
-                    HStack(spacing: 8) {
-                        AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 13)
-                        Text(ide.displayName)
-                        if ide.bundleIdentifier == defaultIDE?.bundleIdentifier {
-                            Spacer()
-                            Text("Default")
-                        }
+            if !editorApps.isEmpty {
+                Section("Editors & IDEs") {
+                    ForEach(editorApps) { ide in
+                        menuButton(for: ide)
+                    }
+                }
+            }
+
+            if !otherToolApps.isEmpty {
+                Section("Other Tools") {
+                    ForEach(otherToolApps) { ide in
+                        menuButton(for: ide)
                     }
                 }
             }
@@ -131,6 +132,32 @@ struct OpenInIDEControl: View {
 
     private var defaultIDE: IDEIntegrationService.IDEApplication? {
         ideService.defaultIDE
+    }
+
+    private var editorApps: [IDEIntegrationService.IDEApplication] {
+        let apps = installedApps.filter { $0.group == .editor }
+        return apps.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private var otherToolApps: [IDEIntegrationService.IDEApplication] {
+        let apps = installedApps.filter { $0.group == .otherTool }
+        return apps.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    @ViewBuilder
+    private func menuButton(for ide: IDEIntegrationService.IDEApplication) -> some View {
+        Button {
+            open(ide)
+        } label: {
+            HStack(spacing: 8) {
+                AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 15)
+                Text(ide.displayName)
+                if ide.bundleIdentifier == defaultIDE?.bundleIdentifier {
+                    Spacer()
+                    Text("Default")
+                }
+            }
+        }
     }
 
     private var helpText: String {

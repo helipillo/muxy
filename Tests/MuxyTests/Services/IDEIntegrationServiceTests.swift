@@ -13,14 +13,16 @@ struct IDEIntegrationServiceTests {
             displayName: "VS Code",
             appURL: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"),
             symbolName: "chevron.left.forwardslash.chevron.right",
-            rank: 10
+            rank: 10,
+            group: .editor
         )
         let zed = IDEIntegrationService.IDEApplication(
             bundleIdentifier: "dev.zed.Zed",
             displayName: "Zed",
             appURL: URL(fileURLWithPath: "/Applications/Zed.app"),
             symbolName: "bolt.horizontal",
-            rank: 13
+            rank: 13,
+            group: .editor
         )
 
         let resolved = IDEIntegrationService.resolveDefaultIDE(
@@ -38,7 +40,8 @@ struct IDEIntegrationServiceTests {
             displayName: "VS Code",
             appURL: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"),
             symbolName: "chevron.left.forwardslash.chevron.right",
-            rank: 10
+            rank: 10,
+            group: .editor
         )
         let location = IDEIntegrationService.EditorLocation(
             filePath: "/tmp/repo/Sources/App.swift",
@@ -68,7 +71,8 @@ struct IDEIntegrationServiceTests {
             displayName: "Zed",
             appURL: URL(fileURLWithPath: "/Applications/Zed.app"),
             symbolName: "bolt.horizontal",
-            rank: 14
+            rank: 14,
+            group: .editor
         )
         let location = IDEIntegrationService.EditorLocation(
             filePath: "/tmp/repo/Sources/App.swift",
@@ -91,14 +95,15 @@ struct IDEIntegrationServiceTests {
         ])
     }
 
-    @Test("launchCommands opens JetBrains project then focused file when launcher is available")
-    func launchCommandsOpensJetBrainsProjectThenFocusedFileWhenLauncherIsAvailable() {
+    @Test("launchCommands uses generic opening for JetBrains even when launcher is available")
+    func launchCommandsUsesGenericOpeningForJetBrainsEvenWhenLauncherIsAvailable() {
         let ide = IDEIntegrationService.IDEApplication(
             bundleIdentifier: "com.jetbrains.PhpStorm",
             displayName: "PhpStorm",
             appURL: URL(fileURLWithPath: "/Applications/PhpStorm.app"),
             symbolName: "chevron.left.forwardslash.chevron.right",
-            rank: 17
+            rank: 17,
+            group: .editor
         )
         let location = IDEIntegrationService.EditorLocation(
             filePath: "/tmp/repo/Sources/App.swift",
@@ -116,11 +121,7 @@ struct IDEIntegrationServiceTests {
         #expect(commands == [
             .init(
                 executablePath: "/usr/bin/open",
-                arguments: ["-a", "/Applications/PhpStorm.app", "/tmp/repo"]
-            ),
-            .init(
-                executablePath: "/usr/local/bin/phpstorm",
-                arguments: ["--line", "12", "--column", "7", "/tmp/repo/Sources/App.swift"]
+                arguments: ["-a", "/Applications/PhpStorm.app", "/tmp/repo", "/tmp/repo/Sources/App.swift"]
             ),
         ])
     }
@@ -132,7 +133,8 @@ struct IDEIntegrationServiceTests {
             displayName: "PhpStorm",
             appURL: URL(fileURLWithPath: "/Applications/PhpStorm.app"),
             symbolName: "chevron.left.forwardslash.chevron.right",
-            rank: 19
+            rank: 19,
+            group: .editor
         )
         let location = IDEIntegrationService.EditorLocation(
             filePath: "/tmp/repo/Sources/App.swift",
@@ -179,14 +181,16 @@ struct IDEIntegrationServiceTests {
             displayName: "VS Code",
             appURL: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"),
             symbolName: "chevron.left.forwardslash.chevron.right",
-            rank: 10
+            rank: 10,
+            group: .editor
         )
         let zed = IDEIntegrationService.IDEApplication(
             bundleIdentifier: "dev.zed.Zed",
             displayName: "Zed",
             appURL: URL(fileURLWithPath: "/Applications/Zed.app"),
             symbolName: "bolt.horizontal",
-            rank: 13
+            rank: 13,
+            group: .editor
         )
 
         let resolved = IDEIntegrationService.resolveDefaultIDE(
@@ -250,33 +254,37 @@ struct IDEIntegrationServiceTests {
                 displayName: "Air",
                 appURL: URL(fileURLWithPath: "/Applications/Air.app"),
                 symbolName: "sparkles",
-                rank: 84
+                rank: 84,
+                group: .otherTool
             ),
             IDEIntegrationService.IDEApplication(
                 bundleIdentifier: "com.jetbrains.PhpStorm",
                 displayName: "PhpStorm",
                 appURL: URL(fileURLWithPath: "/Applications/PhpStorm.app"),
                 symbolName: "chevron.left.forwardslash.chevron.right",
-                rank: 17
+                rank: 17,
+            group: .editor
             ),
             IDEIntegrationService.IDEApplication(
                 bundleIdentifier: "com.microsoft.VSCode",
                 displayName: "VS Code",
                 appURL: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"),
                 symbolName: "chevron.left.forwardslash.chevron.right",
-                rank: 10
+                rank: 10,
+            group: .editor
             ),
             IDEIntegrationService.IDEApplication(
                 bundleIdentifier: "com.google.antigravity",
                 displayName: "Antigravity",
                 appURL: URL(fileURLWithPath: "/Applications/Antigravity.app"),
                 symbolName: "sparkles",
-                rank: 82
+                rank: 82,
+                group: .otherTool
             ),
         ]
 
         let sorted = apps.sorted(by: IDEIntegrationService.compareInstalledApps)
 
-        #expect(sorted.map(\.displayName) == ["VS Code", "PhpStorm", "Antigravity", "Air"])
+        #expect(sorted.map(\.displayName) == ["PhpStorm", "VS Code", "Air", "Antigravity"])
     }
 }

@@ -122,6 +122,33 @@ final class IDEIntegrationService: ObservableObject {
 
     private static let defaultCatalog: [IDECandidate] = [
         IDECandidate(
+            bundleIdentifier: "com.openai.codex",
+            displayName: "Codex",
+            symbolName: "sparkles.rectangle.stack",
+            fallbackPaths: [
+                "/Applications/Codex.app",
+                "~/Applications/Codex.app",
+            ]
+        ),
+        IDECandidate(
+            bundleIdentifier: "ai.opencode.desktop",
+            displayName: "OpenCode",
+            symbolName: "chevron.left.forwardslash.chevron.right",
+            fallbackPaths: [
+                "/Applications/OpenCode.app",
+                "~/Applications/OpenCode.app",
+            ]
+        ),
+        IDECandidate(
+            bundleIdentifier: "com.apple.dt.Xcode",
+            displayName: "Xcode",
+            symbolName: "hammer",
+            fallbackPaths: [
+                "/Applications/Xcode.app",
+                "~/Applications/Xcode.app",
+            ]
+        ),
+        IDECandidate(
             bundleIdentifier: "com.microsoft.VSCode",
             displayName: "VS Code",
             symbolName: "chevron.left.forwardslash.chevron.right",

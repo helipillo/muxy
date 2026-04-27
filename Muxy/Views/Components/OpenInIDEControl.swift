@@ -47,7 +47,7 @@ struct OpenInIDEControl: View {
             label
         }
         .menuStyle(.borderlessButton)
-        .disabled(projectPath == nil || (installedApps.isEmpty && defaultIDE == nil))
+        .disabled(projectPath == nil)
         .help(helpText)
     }
 
@@ -60,10 +60,11 @@ struct OpenInIDEControl: View {
     }
 
     private var helpText: String {
+        guard projectPath != nil else { return "Open a project to enable IDE launching" }
         if let defaultIDE {
             return "Open in \(defaultIDE.displayName)"
         }
-        return "Open in IDE"
+        return installedApps.isEmpty ? "No supported IDEs found" : "Open in IDE"
     }
 
     @ViewBuilder

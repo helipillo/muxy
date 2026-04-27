@@ -76,29 +76,15 @@ final class IDEIntegrationService: ObservableObject {
     }
 
     func refreshInstalledApps() {
-        var discovered: [IDEApplication] = []
-        var seenKeys = Set<String>()
+        let workspace = workspace
+        let fileManager = fileManager
 
-        for root in Self.discoveryRoots(fileManager: fileManager) {
-            for metadata in discoverAppMetadata(in: root) {
-                guard let app = Self.ideApplication(from: metadata) else { continue }
-                let key = dedupeKey(for: app)
-                guard seenKeys.insert(key).inserted else { continue }
-                discovered.append(app)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, workspace, fileManager] in
+            let apps = Self.discoverInstalledApps(workspace: workspace, fileManager: fileManager)
+            DispatchQueue.main.async {
+                self?.installedApps = apps
             }
         }
-
-        for bundleIdentifier in Self.curatedBundleMetadata.keys.sorted() {
-            guard let appURL = workspace.urlForApplication(withBundleIdentifier: bundleIdentifier),
-                  let metadata = Self.loadMetadata(at: appURL)
-            else { continue }
-            guard let app = Self.ideApplication(from: metadata) else { continue }
-            let key = dedupeKey(for: app)
-            guard seenKeys.insert(key).inserted else { continue }
-            discovered.append(app)
-        }
-
-        installedApps = discovered.sorted(by: Self.compareInstalledApps)
     }
 
     @discardableResult
@@ -118,23 +104,11 @@ final class IDEIntegrationService: ObservableObject {
             availableCLICommands: availableCLICommands()
         )
 
-        for command in commands {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: command.executablePath)
-            process.arguments = command.arguments
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-            } catch {
-                return false
-            }
-
-            guard process.terminationStatus == 0 else { return false }
+        let launched = Self.launch(commands: commands)
+        if launched {
+            defaults.set(app.bundleIdentifier, forKey: Self.selectedBundleIdentifierKey)
         }
-
-        defaults.set(app.bundleIdentifier, forKey: Self.selectedBundleIdentifierKey)
-        return true
+        return launched
     }
 
     static func launchCommands(
@@ -172,7 +146,7 @@ final class IDEIntegrationService: ObservableObject {
         }
     }
 
-    static func openTargetArguments(projectPath: String, filePath: String?) -> [String] {
+    nonisolated static func openTargetArguments(projectPath: String, filePath: String?) -> [String] {
         var orderedPaths = [projectPath]
 
         if let filePath,
@@ -185,13 +159,13 @@ final class IDEIntegrationService: ObservableObject {
         return orderedPaths
     }
 
-    static func vscodeGotoTarget(for location: EditorLocation) -> String {
+    nonisolated static func vscodeGotoTarget(for location: EditorLocation) -> String {
         let safeLine = max(1, location.line)
         let safeColumn = max(1, location.column)
         return "\(location.filePath):\(safeLine):\(safeColumn)"
     }
 
-    static func zedTarget(for location: EditorLocation) -> String {
+    nonisolated static func zedTarget(for location: EditorLocation) -> String {
         vscodeGotoTarget(for: location)
     }
 
@@ -206,7 +180,50 @@ final class IDEIntegrationService: ObservableObject {
         return installedApps.first
     }
 
-    static func ideApplication(from metadata: AppMetadata) -> IDEApplication? {
+    nonisolated private static func discoverInstalledApps(workspace: NSWorkspace, fileManager: FileManager) -> [IDEApplication] {
+        var discovered: [IDEApplication] = []
+        var seenKeys = Set<String>()
+
+        for root in discoveryRoots(fileManager: fileManager) {
+            for metadata in discoverAppMetadata(in: root, fileManager: fileManager) {
+                guard let app = ideApplication(from: metadata) else { continue }
+                let key = dedupeKey(for: app)
+                guard seenKeys.insert(key).inserted else { continue }
+                discovered.append(app)
+            }
+        }
+
+        for bundleIdentifier in curatedBundleMetadata.keys.sorted() {
+            guard let appURL = workspace.urlForApplication(withBundleIdentifier: bundleIdentifier),
+                  let metadata = loadMetadata(at: appURL)
+            else { continue }
+            guard let app = ideApplication(from: metadata) else { continue }
+            let key = dedupeKey(for: app)
+            guard seenKeys.insert(key).inserted else { continue }
+            discovered.append(app)
+        }
+
+        return discovered.sorted(by: compareInstalledApps)
+    }
+
+    private static func launch(commands: [LaunchCommand]) -> Bool {
+        for command in commands {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: command.executablePath)
+            process.arguments = command.arguments
+
+            do {
+                try process.run()
+            } catch {
+                return false
+            }
+        }
+
+        return true
+    }
+
+
+    nonisolated static func ideApplication(from metadata: AppMetadata) -> IDEApplication? {
         guard let match = matchMetadata(for: metadata) else { return nil }
         return IDEApplication(
             bundleIdentifier: metadata.bundleIdentifier,
@@ -218,7 +235,7 @@ final class IDEIntegrationService: ObservableObject {
         )
     }
 
-    static func matchMetadata(for metadata: AppMetadata) -> MatchMetadata? {
+    nonisolated static func matchMetadata(for metadata: AppMetadata) -> MatchMetadata? {
         if let curated = curatedBundleMetadata[metadata.bundleIdentifier] {
             return curated
         }
@@ -255,9 +272,12 @@ final class IDEIntegrationService: ObservableObject {
         return nil
     }
 
-    static func compareInstalledApps(_ lhs: IDEApplication, _ rhs: IDEApplication) -> Bool {
+    nonisolated static func compareInstalledApps(_ lhs: IDEApplication, _ rhs: IDEApplication) -> Bool {
         if lhs.group != rhs.group {
             return lhs.group.rawValue < rhs.group.rawValue
+        }
+        if lhs.rank != rhs.rank {
+            return lhs.rank < rhs.rank
         }
         let nameOrder = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
         if nameOrder != .orderedSame {
@@ -266,14 +286,14 @@ final class IDEIntegrationService: ObservableObject {
         return lhs.appURL.path.localizedCaseInsensitiveCompare(rhs.appURL.path) == .orderedAscending
     }
 
-    static func discoveryRoots(fileManager: FileManager) -> [URL] {
+    nonisolated static func discoveryRoots(fileManager: FileManager) -> [URL] {
         [
             URL(fileURLWithPath: "/Applications"),
             fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications"),
         ].filter { fileManager.fileExists(atPath: $0.path) }
     }
 
-    static func loadMetadata(at appURL: URL) -> AppMetadata? {
+    nonisolated static func loadMetadata(at appURL: URL) -> AppMetadata? {
         let infoURL = appURL.appendingPathComponent("Contents/Info.plist")
         guard let info = NSDictionary(contentsOf: infoURL) as? [String: Any] else { return nil }
 
@@ -293,7 +313,7 @@ final class IDEIntegrationService: ObservableObject {
         )
     }
 
-    private func discoverAppMetadata(in root: URL) -> [AppMetadata] {
+    nonisolated private static func discoverAppMetadata(in root: URL, fileManager: FileManager) -> [AppMetadata] {
         guard let enumerator = fileManager.enumerator(
             at: root,
             includingPropertiesForKeys: nil,
@@ -305,7 +325,7 @@ final class IDEIntegrationService: ObservableObject {
         var results: [AppMetadata] = []
         for case let url as URL in enumerator {
             guard url.pathExtension.lowercased() == "app" else { continue }
-            if let metadata = Self.loadMetadata(at: url) {
+            if let metadata = loadMetadata(at: url) {
                 results.append(metadata)
             }
             enumerator.skipDescendants()
@@ -332,14 +352,14 @@ final class IDEIntegrationService: ObservableObject {
         return result
     }
 
-    private func dedupeKey(for app: IDEApplication) -> String {
+    nonisolated private static func dedupeKey(for app: IDEApplication) -> String {
         if !app.bundleIdentifier.isEmpty {
             return app.bundleIdentifier
         }
         return app.appURL.standardizedFileURL.path
     }
 
-    private static func executablePath(named commandName: String) -> String? {
+    nonisolated private static func executablePath(named commandName: String) -> String? {
         let pathDirectories = (ProcessInfo.processInfo.environment["PATH"] ?? "")
             .split(separator: ":")
             .map(String.init)
@@ -361,7 +381,7 @@ final class IDEIntegrationService: ObservableObject {
         return nil
     }
 
-    private static func resolveCLIPath(
+    nonisolated private static func resolveCLIPath(
         commandNames: [String],
         availableCLICommands: [String: String]
     ) -> String? {
@@ -373,7 +393,7 @@ final class IDEIntegrationService: ObservableObject {
         return nil
     }
 
-    private static func launchStrategy(forBundleIdentifier bundleIdentifier: String) -> LaunchStrategy {
+    nonisolated private static func launchStrategy(forBundleIdentifier bundleIdentifier: String) -> LaunchStrategy {
         if let commandNames = vscodeLikeBundleIdentifiers[bundleIdentifier] {
             return .vscodeLike(commandNames: commandNames)
         }
@@ -386,24 +406,24 @@ final class IDEIntegrationService: ObservableObject {
         return .generic
     }
 
-    private static func genericOpenCommand(for ide: IDEApplication, projectPath: String, filePath: String?) -> LaunchCommand {
+    nonisolated private static func genericOpenCommand(for ide: IDEApplication, projectPath: String, filePath: String?) -> LaunchCommand {
         LaunchCommand(
             executablePath: "/usr/bin/open",
             arguments: ["-a", ide.appURL.path] + openTargetArguments(projectPath: projectPath, filePath: filePath)
         )
     }
 
-    private static func jetbrainsLikeSymbolName(for bundleIdentifier: String) -> String {
+    nonisolated private static func jetbrainsLikeSymbolName(for bundleIdentifier: String) -> String {
         aiCompanionBundleIdentifiers.contains(bundleIdentifier) ? "sparkles" : "chevron.left.forwardslash.chevron.right"
     }
 
-    private static func containsKeyword(_ keyword: String, in haystack: String) -> Bool {
+    nonisolated private static func containsKeyword(_ keyword: String, in haystack: String) -> Bool {
         haystack.contains(keyword.lowercased())
     }
 
-    private static let developerToolsCategory = "public.app-category.developer-tools"
+    nonisolated private static let developerToolsCategory = "public.app-category.developer-tools"
 
-    private static let vscodeLikeBundleIdentifiers: [String: [String]] = [
+    nonisolated private static let vscodeLikeBundleIdentifiers: [String: [String]] = [
         "com.microsoft.VSCode": ["code"],
         "com.microsoft.VSCodeInsiders": ["code-insiders"],
         "com.todesktop.230313mzl4w4u92": ["cursor"],
@@ -411,11 +431,11 @@ final class IDEIntegrationService: ObservableObject {
         "com.vscodium": ["codium", "vscodium"],
     ]
 
-    private static let zedLikeBundleIdentifiers: [String: [String]] = [
+    nonisolated private static let zedLikeBundleIdentifiers: [String: [String]] = [
         "dev.zed.Zed": ["zed"],
     ]
 
-    private static let jetbrainsCLICommandNames: [String: [String]] = [
+    nonisolated private static let jetbrainsCLICommandNames: [String: [String]] = [
         "com.jetbrains.PhpStorm": ["phpstorm"],
         "com.jetbrains.WebStorm": ["webstorm"],
         "com.jetbrains.PyCharm": ["pycharm"],
@@ -429,7 +449,7 @@ final class IDEIntegrationService: ObservableObject {
         "com.jetbrains.air": ["air"],
     ]
 
-    private static let aiCompanionBundleIdentifiers: Set<String> = [
+    nonisolated private static let aiCompanionBundleIdentifiers: Set<String> = [
         "com.openai.codex",
         "ai.opencode.desktop",
         "com.google.antigravity",
@@ -437,7 +457,7 @@ final class IDEIntegrationService: ObservableObject {
         "com.jetbrains.air",
     ]
 
-    private static let knownCLICommandNames: Set<String> = [
+    nonisolated private static let knownCLICommandNames: Set<String> = [
         "air",
         "clion",
         "code",
@@ -459,7 +479,7 @@ final class IDEIntegrationService: ObservableObject {
         "vscodium",
     ]
 
-    private static let curatedBundleMetadata: [String: MatchMetadata] = [
+    nonisolated private static let curatedBundleMetadata: [String: MatchMetadata] = [
         "com.microsoft.VSCode": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 10, group: .editor),
         "com.microsoft.VSCodeInsiders": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 11, group: .editor),
         "com.vscodium": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 12, group: .editor),
@@ -488,7 +508,7 @@ final class IDEIntegrationService: ObservableObject {
         "com.jetbrains.air": .init(symbolName: "sparkles", rank: 84, group: .otherTool),
     ]
 
-    private static let editorLikeNameFragments: [String] = [
+    nonisolated private static let editorLikeNameFragments: [String] = [
         "code",
         "cursor",
         "zed",
@@ -520,7 +540,7 @@ final class IDEIntegrationService: ObservableObject {
         "air",
     ]
 
-    private static let keywordMatches: [(keyword: String, symbolName: String, rank: Int, group: IDEApplication.Group)] = [
+    nonisolated private static let keywordMatches: [(keyword: String, symbolName: String, rank: Int, group: IDEApplication.Group)] = [
         ("visual studio code", "chevron.left.forwardslash.chevron.right", 10, .editor),
         ("vscode", "chevron.left.forwardslash.chevron.right", 11, .editor),
         ("code - insiders", "chevron.left.forwardslash.chevron.right", 12, .editor),

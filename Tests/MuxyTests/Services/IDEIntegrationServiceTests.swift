@@ -246,8 +246,8 @@ struct IDEIntegrationServiceTests {
         #expect(IDEIntegrationService.ideApplication(from: metadata) == nil)
     }
 
-    @Test("sort prioritizes IDEs before AI companion apps")
-    func sortPrioritizesIDEsBeforeAICompanionApps() {
+    @Test("sort prioritizes IDEs before AI companion apps and honors rank within a group")
+    func sortPrioritizesIDEsBeforeAICompanionAppsAndHonorsRankWithinGroup() {
         let apps = [
             IDEIntegrationService.IDEApplication(
                 bundleIdentifier: "com.jetbrains.air",
@@ -285,6 +285,6 @@ struct IDEIntegrationServiceTests {
 
         let sorted = apps.sorted(by: IDEIntegrationService.compareInstalledApps)
 
-        #expect(sorted.map(\.displayName) == ["PhpStorm", "VS Code", "Air", "Antigravity"])
+        #expect(sorted.map(\.displayName) == ["VS Code", "PhpStorm", "Antigravity", "Air"])
     }
 }

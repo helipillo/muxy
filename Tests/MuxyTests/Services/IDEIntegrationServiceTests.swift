@@ -6,6 +6,26 @@ import Testing
 @Suite("IDEIntegrationService")
 @MainActor
 struct IDEIntegrationServiceTests {
+    @Test("resolveDefaultIDE returns Finder when Finder was the remembered launcher target")
+    func resolveDefaultIDEReturnsFinderWhenFinderWasRemembered() {
+        let vscode = IDEIntegrationService.IDEApplication(
+            bundleIdentifier: "com.microsoft.VSCode",
+            displayName: "VS Code",
+            appURL: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"),
+            symbolName: "chevron.left.forwardslash.chevron.right",
+            rank: 10,
+            group: .editor
+        )
+
+        let resolved = IDEIntegrationService.resolveDefaultIDE(
+            installedApps: [vscode],
+            selectedBundleIdentifier: IDEIntegrationService.finderBundleIdentifier
+        )
+
+        #expect(resolved?.bundleIdentifier == IDEIntegrationService.finderBundleIdentifier)
+        #expect(resolved?.displayName == "Finder")
+    }
+
     @Test("resolveDefaultIDE prefers remembered selection when installed")
     func resolveDefaultIDEPrefersRememberedSelection() {
         let vscode = IDEIntegrationService.IDEApplication(
@@ -220,17 +240,56 @@ struct IDEIntegrationServiceTests {
     @Test("classifies developer tools by editor-like names")
     func classifiesDeveloperToolsByEditorLikeNames() {
         let metadata = IDEIntegrationService.AppMetadata(
-            bundleIdentifier: "com.google.antigravity",
-            displayName: "Antigravity",
-            executableName: "Electron",
+            bundleIdentifier: "com.example.code-editor",
+            displayName: "Acme Code Editor",
+            executableName: "AcmeCodeEditor",
             category: "public.app-category.developer-tools",
-            appURL: URL(fileURLWithPath: "/Applications/Antigravity.app")
+            appURL: URL(fileURLWithPath: "/Applications/Acme Code Editor.app")
         )
 
         let app = IDEIntegrationService.ideApplication(from: metadata)
 
         #expect(app != nil)
-        #expect(app?.symbolName == "sparkles")
+        #expect(app?.group == .editor)
+    }
+
+    @Test("does not classify AI developer tools by generic keywords without a curated desktop bundle")
+    func doesNotClassifyAIDeveloperToolsByGenericKeywordsWithoutCuratedDesktopBundle() {
+        let metadata = IDEIntegrationService.AppMetadata(
+            bundleIdentifier: "com.example.codex-wrapper",
+            displayName: "Codex Wrapper",
+            executableName: "codex",
+            category: "public.app-category.developer-tools",
+            appURL: URL(fileURLWithPath: "/Applications/Codex Wrapper.app")
+        )
+
+        #expect(IDEIntegrationService.ideApplication(from: metadata) == nil)
+    }
+
+    @Test("does not classify Jcode-like wrappers by generic code fallback")
+    func doesNotClassifyJcodeLikeWrappersByGenericCodeFallback() {
+        let metadata = IDEIntegrationService.AppMetadata(
+            bundleIdentifier: "com.example.jcode-wrapper",
+            displayName: "Jcode Wrapper",
+            executableName: "jcode",
+            category: "public.app-category.developer-tools",
+            appURL: URL(fileURLWithPath: "/Applications/Jcode Wrapper.app")
+        )
+
+        #expect(IDEIntegrationService.ideApplication(from: metadata) == nil)
+    }
+
+    @Test("does not classify Claude Code style wrappers by generic code fallback")
+    func doesNotClassifyClaudeCodeStyleWrappersByGenericCodeFallback() {
+        let metadata = IDEIntegrationService.AppMetadata(
+            bundleIdentifier: "com.example.claude-code-wrapper",
+            displayName: "Claude Code",
+            executableName: "claude-code",
+            category: "public.app-category.developer-tools",
+            appURL: URL(fileURLWithPath: "/Applications/Claude Code.app")
+        )
+
+        #expect(IDEIntegrationService.ideApplication(from: metadata) == nil)
     }
 
     @Test("does not classify JetBrains Toolbox as an IDE target")

@@ -100,6 +100,21 @@ struct OpenInIDEControl: View {
 
     private var menuPopoverContent: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let projectPath {
+                menuActionRow(
+                    appURL: IDEIntegrationService.finderAppURL,
+                    fallbackSystemName: "folder",
+                    title: "Finder"
+                ) {
+                    showingMenu = false
+                    _ = ideService.openProject(at: projectPath, in: IDEIntegrationService.finderApplication)
+                }
+                if !installedApps.isEmpty {
+                    Divider()
+                        .padding(.vertical, 4)
+                }
+            }
+
             if installedApps.isEmpty {
                 Text("No supported IDEs found")
                     .font(.system(size: 12))
@@ -116,7 +131,7 @@ struct OpenInIDEControl: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(8)
         .fixedSize(horizontal: true, vertical: true)
         .background(MuxyTheme.bg)
     }
@@ -163,6 +178,15 @@ struct OpenInIDEControl: View {
                 open(ide)
             }
         )
+    }
+
+    private func menuActionRow(
+        appURL: URL,
+        fallbackSystemName: String,
+        title: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        IDEMenuActionRow(appURL: appURL, fallbackSystemName: fallbackSystemName, title: title, action: action)
     }
 
     private var helpText: String {
@@ -221,6 +245,35 @@ private struct IDEMenuRow: View {
             HStack(spacing: 7) {
                 AppBundleIconView(appURL: ide.appURL, fallbackSystemName: ide.symbolName, size: 14)
                 Text(ide.displayName)
+                    .font(.system(size: 12))
+            }
+            .foregroundStyle(MuxyTheme.fg)
+            .padding(.leading, 9)
+            .padding(.trailing, 12)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(hovered ? MuxyTheme.hover : .clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+    }
+}
+
+@MainActor
+private struct IDEMenuActionRow: View {
+    let appURL: URL
+    let fallbackSystemName: String
+    let title: String
+    let action: () -> Void
+
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                AppBundleIconView(appURL: appURL, fallbackSystemName: fallbackSystemName, size: 14)
+                Text(title)
                     .font(.system(size: 12))
             }
             .foregroundStyle(MuxyTheme.fg)

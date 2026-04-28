@@ -241,7 +241,8 @@ User action → AppState.dispatch() → WorkspaceReducer.reduce()
   `OpenInIDEControl` and the app menu. `IDEIntegrationService` scans installed applications, classifies
   editor-like apps by bundle metadata, remembers the last launched bundle identifier in user defaults,
   and prefers CLI-based launch commands for VS Code-like and Zed-like apps so the current file, line,
-  and column can be highlighted when available.
+  and column can be highlighted when available. The same launcher surface also provides a native Finder
+  reveal action for the active project path.
 - **Syntax Highlighting**: `EditorTabState` owns a `SyntaxHighlighter` created from the file
   extension via `SyntaxLanguageRegistry`. The highlighter keeps a per-line `LineEndState` cache
   so multiline constructs (block comments, multiline strings) are preserved across scroll without

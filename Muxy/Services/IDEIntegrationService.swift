@@ -56,6 +56,16 @@ final class IDEIntegrationService: ObservableObject {
     }
 
     static let selectedBundleIdentifierKey = "muxy.ide.selectedBundleIdentifier"
+    static let finderBundleIdentifier = "com.apple.finder"
+    static let finderAppURL = URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app")
+    static let finderApplication = IDEApplication(
+        bundleIdentifier: finderBundleIdentifier,
+        displayName: "Finder",
+        appURL: finderAppURL,
+        symbolName: "folder",
+        rank: 79,
+        group: .otherTool
+    )
 
     @Published private(set) var installedApps: [IDEApplication] = []
 
@@ -106,6 +116,12 @@ final class IDEIntegrationService: ObservableObject {
     ) -> Bool {
         guard let app = ide ?? defaultIDE else { return false }
 
+        if app.bundleIdentifier == Self.finderBundleIdentifier {
+            revealInFinder(at: path)
+            defaults.set(app.bundleIdentifier, forKey: Self.selectedBundleIdentifierKey)
+            return true
+        }
+
         let commands = Self.launchCommands(
             for: app,
             projectPath: path,
@@ -118,6 +134,11 @@ final class IDEIntegrationService: ObservableObject {
             defaults.set(app.bundleIdentifier, forKey: Self.selectedBundleIdentifierKey)
         }
         return launched
+    }
+
+    func revealInFinder(at path: String) {
+        let url = URL(fileURLWithPath: path)
+        workspace.activateFileViewerSelecting([url])
     }
 
     static func launchCommands(
@@ -183,6 +204,9 @@ final class IDEIntegrationService: ObservableObject {
         installedApps: [IDEApplication],
         selectedBundleIdentifier: String?
     ) -> IDEApplication? {
+        if selectedBundleIdentifier == finderBundleIdentifier {
+            return finderApplication
+        }
         if let selectedBundleIdentifier,
            let selected = installedApps.first(where: { $0.bundleIdentifier == selectedBundleIdentifier })
         {
@@ -433,7 +457,28 @@ final class IDEIntegrationService: ObservableObject {
     }
 
     nonisolated private static func containsKeyword(_ keyword: String, in haystack: String) -> Bool {
-        haystack.contains(keyword.lowercased())
+        let haystackTokens = haystack
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+        let keywordTokens = keyword.lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+
+        guard !keywordTokens.isEmpty else { return false }
+        guard haystackTokens.count >= keywordTokens.count else { return false }
+
+        if keywordTokens.count == 1 {
+            return haystackTokens.contains(keywordTokens[0])
+        }
+
+        let lastStartIndex = haystackTokens.count - keywordTokens.count
+        for startIndex in 0 ... lastStartIndex {
+            if Array(haystackTokens[startIndex ..< startIndex + keywordTokens.count]) == keywordTokens {
+                return true
+            }
+        }
+
+        return false
     }
 
     nonisolated private static let developerToolsCategory = "public.app-category.developer-tools"
@@ -468,7 +513,6 @@ final class IDEIntegrationService: ObservableObject {
         "com.openai.codex",
         "ai.opencode.desktop",
         "com.google.antigravity",
-        "com.jcode.launcher",
         "com.jetbrains.air",
     ]
 
@@ -519,12 +563,10 @@ final class IDEIntegrationService: ObservableObject {
         "com.openai.codex": .init(symbolName: "sparkles.rectangle.stack", rank: 80, group: .otherTool),
         "ai.opencode.desktop": .init(symbolName: "chevron.left.forwardslash.chevron.right", rank: 81, group: .otherTool),
         "com.google.antigravity": .init(symbolName: "sparkles", rank: 82, group: .otherTool),
-        "com.jcode.launcher": .init(symbolName: "terminal", rank: 83, group: .otherTool),
         "com.jetbrains.air": .init(symbolName: "sparkles", rank: 84, group: .otherTool),
     ]
 
     nonisolated private static let editorLikeNameFragments: [String] = [
-        "code",
         "cursor",
         "zed",
         "studio",
@@ -532,15 +574,11 @@ final class IDEIntegrationService: ObservableObject {
         "editor",
         "nova",
         "fleet",
-        "codex",
-        "opencode",
         "windsurf",
         "xcode",
         "sublime",
         "bbedit",
         "textmate",
-        "antigravity",
-        "jcode",
         "phpstorm",
         "webstorm",
         "pycharm",
@@ -552,7 +590,6 @@ final class IDEIntegrationService: ObservableObject {
         "intellij",
         "idea",
         "android studio",
-        "air",
     ]
 
     nonisolated private static let keywordMatches: [KeywordMatch] = [
@@ -579,11 +616,6 @@ final class IDEIntegrationService: ObservableObject {
         .init(keyword: "sublime text", symbolName: "text.cursor", rank: 30, group: .editor),
         .init(keyword: "bbedit", symbolName: "text.cursor", rank: 31, group: .editor),
         .init(keyword: "textmate", symbolName: "text.cursor", rank: 32, group: .editor),
-        .init(keyword: "codex", symbolName: "sparkles.rectangle.stack", rank: 80, group: .otherTool),
-        .init(keyword: "opencode", symbolName: "chevron.left.forwardslash.chevron.right", rank: 81, group: .otherTool),
-        .init(keyword: "antigravity", symbolName: "sparkles", rank: 82, group: .otherTool),
-        .init(keyword: "jcode", symbolName: "terminal", rank: 83, group: .otherTool),
-        .init(keyword: "air", symbolName: "sparkles", rank: 84, group: .otherTool),
     ]
 
     private enum LaunchStrategy {

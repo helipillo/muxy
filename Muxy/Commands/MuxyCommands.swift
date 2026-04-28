@@ -142,7 +142,30 @@ struct MuxyCommands: Commands {
                 .disabled(activeProjectPath == nil)
             }
 
+            Button {
+                guard let activeProjectPath else { return }
+                _ = ideService.openProject(at: activeProjectPath, in: IDEIntegrationService.finderApplication)
+            } label: {
+                HStack(spacing: 8) {
+                    AppBundleIconView(appURL: IDEIntegrationService.finderAppURL, fallbackSystemName: "folder", size: 20)
+                    Text("Finder")
+                }
+            }
+            .disabled(activeProjectPath == nil)
+
             Menu("Open in IDE") {
+                Button {
+                    guard let activeProjectPath else { return }
+                    _ = ideService.openProject(at: activeProjectPath, in: IDEIntegrationService.finderApplication)
+                } label: {
+                    HStack(spacing: 8) {
+                        AppBundleIconView(appURL: IDEIntegrationService.finderAppURL, fallbackSystemName: "folder", size: 20)
+                        Text("Finder")
+                    }
+                }
+
+                Divider()
+
                 if ideService.installedApps.isEmpty {
                     Button("No supported IDEs found") {}
                         .disabled(true)

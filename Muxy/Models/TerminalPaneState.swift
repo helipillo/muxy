@@ -8,6 +8,7 @@ final class TerminalPaneState: Identifiable {
     var title: String
     var currentWorkingDirectory: String?
     let startupCommand: String?
+    let startupCommandInteractive: Bool
     let externalEditorFilePath: String?
     let searchState = TerminalSearchState()
     @ObservationIgnored private var titleDebounceTask: Task<Void, Never>?
@@ -17,12 +18,14 @@ final class TerminalPaneState: Identifiable {
         title: String = "Terminal",
         initialWorkingDirectory: String? = nil,
         startupCommand: String? = nil,
+        startupCommandInteractive: Bool = false,
         externalEditorFilePath: String? = nil
     ) {
         self.projectPath = projectPath
         self.title = title
         self.currentWorkingDirectory = initialWorkingDirectory
         self.startupCommand = startupCommand
+        self.startupCommandInteractive = startupCommandInteractive
         self.externalEditorFilePath = externalEditorFilePath
     }
 

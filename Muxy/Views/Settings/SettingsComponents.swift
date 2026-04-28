@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum SettingsMetrics {
@@ -17,9 +18,11 @@ struct SettingsContainer<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(spacing: 0) {
-            content
-            Spacer(minLength: 0)
+        ScrollView {
+            VStack(spacing: 0) {
+                content
+            }
+            .frame(maxWidth: .infinity, alignment: .top)
         }
     }
 }
@@ -122,5 +125,26 @@ struct SettingsPickerRow<Option: CaseIterable & Identifiable & RawRepresentable>
             .labelsHidden()
             .frame(width: width, alignment: .trailing)
         }
+    }
+}
+
+extension View {
+    func resetsSettingsFocusOnOutsideClick() -> some View {
+        background(SettingsFocusResetView())
+    }
+}
+
+private struct SettingsFocusResetView: NSViewRepresentable {
+    func makeNSView(context: Context) -> SettingsFocusResetNSView {
+        SettingsFocusResetNSView()
+    }
+
+    func updateNSView(_ nsView: SettingsFocusResetNSView, context: Context) {}
+}
+
+private final class SettingsFocusResetNSView: NSView {
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(nil)
+        super.mouseDown(with: event)
     }
 }

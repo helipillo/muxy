@@ -5,6 +5,7 @@ final class GhosttyTerminalNSView: NSView {
     nonisolated(unsafe) private(set) var surface: ghostty_surface_t?
     private let workingDirectory: String
     private let command: String?
+    private let commandInteractive: Bool
     var envVars: [(key: String, value: String)] = []
     var onTitleChange: ((String) -> Void)?
     var onWorkingDirectoryChange: ((String) -> Void)?
@@ -37,9 +38,10 @@ final class GhosttyTerminalNSView: NSView {
     private var currentKeyEvent: NSEvent?
     private var commandSelectorCalled = false
 
-    init(workingDirectory: String, command: String? = nil) {
+    init(workingDirectory: String, command: String? = nil, commandInteractive: Bool = false) {
         self.workingDirectory = workingDirectory
         self.command = command
+        self.commandInteractive = commandInteractive
         super.init(frame: .zero)
         wantsLayer = true
         setupTrackingArea()
@@ -99,7 +101,7 @@ final class GhosttyTerminalNSView: NSView {
         var cStrings: [UnsafeMutablePointer<CChar>] = []
         defer { cStrings.forEach { free($0) } }
 
-        if let command, let loginWrapped = strdup(Self.loginShellCommand(command)) {
+        if let command, let loginWrapped = strdup(Self.loginShellCommand(command, interactive: commandInteractive)) {
             cStrings.append(loginWrapped)
             config.command = UnsafePointer(loginWrapped)
             config.wait_after_command = false
@@ -298,6 +300,7 @@ final class GhosttyTerminalNSView: NSView {
         }
         let scopes = ShortcutContext.activeScopes(for: window)
         return KeyBindingStore.shared.isRegisteredShortcut(event: event, scopes: scopes)
+            || CommandShortcutStore.shared.isRegisteredShortcut(event: event, scopes: scopes)
     }
 
     private static let systemShortcutKeys: Set<String> = ["q", "h", "m", ","]
@@ -860,10 +863,11 @@ final class GhosttyTerminalNSView: NSView {
         surface != nil
     }
 
-    private static func loginShellCommand(_ command: String) -> String {
+    private static func loginShellCommand(_ command: String, interactive: Bool) -> String {
         let shell = userShell()
         let escaped = command.replacingOccurrences(of: "'", with: "'\\''")
-        return "\(shell) -l -c '\(escaped)'"
+        let flags = interactive ? "-l -i" : "-l"
+        return "\(shell) \(flags) -c '\(escaped)'"
     }
 
     private static func userShell() -> String {

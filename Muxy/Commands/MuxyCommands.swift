@@ -8,6 +8,7 @@ struct MuxyCommands: Commands {
     let projectStore: ProjectStore
     let worktreeStore: WorktreeStore
     let keyBindings: KeyBindingStore
+    let commandShortcuts: CommandShortcutStore
     let config: MuxyConfig
     let ghostty: GhosttyService
     let updateService: UpdateService
@@ -61,6 +62,24 @@ struct MuxyCommands: Commands {
                 attached: { NotificationCenter.default.post(name: .toggleAttachedVCS, object: nil) }
             )
         }
+    }
+
+    private var isMarkdownPreviewActive: Bool {
+        guard let state = activeEditorState, state.isMarkdownFile else { return false }
+        return state.markdownViewMode == .preview || state.markdownViewMode == .split
+    }
+
+    private func adjustMarkdownPreviewZoom(by delta: CGFloat) {
+        EditorSettings.shared.adjustMarkdownPreviewFontScale(by: delta)
+    }
+
+    private func performCommandShortcut(_ shortcut: CommandShortcut) {
+        guard isMainWindowFocused,
+              let projectID = appState.activeProjectID,
+              appState.workspaceRoot(for: projectID) != nil,
+              !shortcut.trimmedCommand.isEmpty
+        else { return }
+        appState.createCommandTab(projectID: projectID, shortcut: shortcut)
     }
 
     var body: some Commands {
@@ -123,36 +142,6 @@ struct MuxyCommands: Commands {
             }
             .shortcut(for: .openProject, store: keyBindings)
 
-            if let defaultIDE = ideService.defaultIDE {
-                Button {
-                    guard let activeProjectPath else { return }
-                    _ = ideService.openProject(
-                        at: activeProjectPath,
-                        highlightingFileAt: activeEditorFilePath,
-                        line: activeEditorCursorLine,
-                        column: activeEditorCursorColumn,
-                        in: defaultIDE
-                    )
-                } label: {
-                    HStack(spacing: 8) {
-                        AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 20)
-                        Text("Open in \(defaultIDE.displayName)")
-                    }
-                }
-                .disabled(activeProjectPath == nil)
-            }
-
-            Button {
-                guard let activeProjectPath else { return }
-                _ = ideService.openProject(at: activeProjectPath, in: IDEIntegrationService.finderApplication)
-            } label: {
-                HStack(spacing: 8) {
-                    AppBundleIconView(appURL: IDEIntegrationService.finderAppURL, fallbackSystemName: "folder", size: 20)
-                    Text("Finder")
-                }
-            }
-            .disabled(activeProjectPath == nil)
-
             Menu("Open in IDE") {
                 Button {
                     guard let activeProjectPath else { return }
@@ -196,6 +185,20 @@ struct MuxyCommands: Commands {
                 performShortcutAction(.newTab)
             }
             .shortcut(for: .newTab, store: keyBindings)
+
+            Menu("Custom Commands") {
+                if commandShortcuts.shortcuts.isEmpty {
+                    Button("No Custom Commands") {}
+                        .disabled(true)
+                } else {
+                    ForEach(commandShortcuts.shortcuts) { shortcut in
+                        Button(shortcut.displayName) {
+                            performCommandShortcut(shortcut)
+                        }
+                        .disabled(shortcut.trimmedCommand.isEmpty)
+                    }
+                }
+            }
 
             Button("Source Control") {
                 guard isMainWindowFocused else { return }
@@ -283,6 +286,29 @@ struct MuxyCommands: Commands {
                 performShortcutAction(.focusPaneDown)
             }
             .shortcut(for: .focusPaneDown, store: keyBindings)
+        }
+
+        CommandGroup(after: .toolbar) {
+            Button("Zoom In Markdown Preview") {
+                guard isMainWindowFocused, isMarkdownPreviewActive else { return }
+                adjustMarkdownPreviewZoom(by: EditorSettings.markdownPreviewZoomStep)
+            }
+            .keyboardShortcut("=", modifiers: .command)
+            .disabled(!isMarkdownPreviewActive)
+
+            Button("Zoom Out Markdown Preview") {
+                guard isMainWindowFocused, isMarkdownPreviewActive else { return }
+                adjustMarkdownPreviewZoom(by: -EditorSettings.markdownPreviewZoomStep)
+            }
+            .keyboardShortcut("-", modifiers: .command)
+            .disabled(!isMarkdownPreviewActive)
+
+            Button("Reset Markdown Preview Zoom") {
+                guard isMainWindowFocused, isMarkdownPreviewActive else { return }
+                EditorSettings.shared.markdownPreviewFontScale = EditorSettings.defaultMarkdownPreviewFontScale
+            }
+            .keyboardShortcut("0", modifiers: .command)
+            .disabled(!isMarkdownPreviewActive)
         }
 
         CommandGroup(after: .windowList) {

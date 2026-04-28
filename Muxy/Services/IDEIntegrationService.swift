@@ -472,10 +472,10 @@ final class IDEIntegrationService: ObservableObject {
         }
 
         let lastStartIndex = haystackTokens.count - keywordTokens.count
-        for startIndex in 0 ... lastStartIndex {
-            if Array(haystackTokens[startIndex ..< startIndex + keywordTokens.count]) == keywordTokens {
-                return true
-            }
+        for startIndex in 0 ... lastStartIndex
+            where Array(haystackTokens[startIndex ..< startIndex + keywordTokens.count]) == keywordTokens
+        {
+            return true
         }
 
         return false

@@ -7,6 +7,7 @@ final class GhosttyTerminalNSView: NSView {
     private let command: String?
     var envVars: [(key: String, value: String)] = []
     var onTitleChange: ((String) -> Void)?
+    var onWorkingDirectoryChange: ((String) -> Void)?
     var onFocus: (() -> Void)?
     var onProcessExit: (() -> Void)?
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?

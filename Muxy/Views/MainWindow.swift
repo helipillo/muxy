@@ -388,6 +388,10 @@ struct MainWindow: View {
                 }
                 .overlay(alignment: .trailing) {
                     HStack(spacing: 0) {
+                        if AppEnvironment.isDevelopment {
+                            devModeBadge
+                                .padding(.trailing, 6)
+                        }
                         if let project = activeProject {
                             OpenInIDEControl(
                                 projectPath: activeWorktreePath(for: project),
@@ -395,10 +399,6 @@ struct MainWindow: View {
                                 line: activeEditorCursorLine,
                                 column: activeEditorCursorColumn
                             )
-                        }
-                        if AppEnvironment.isDevelopment {
-                            devModeBadge
-                                .padding(.trailing, 6)
                         }
                         if let version = UpdateService.shared.availableUpdateVersion {
                             UpdateBadge(version: version) {

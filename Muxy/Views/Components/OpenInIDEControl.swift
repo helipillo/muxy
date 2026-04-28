@@ -252,7 +252,7 @@ private struct IDEMenuRow: View {
             .padding(.trailing, 12)
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(hovered ? MuxyTheme.hover : .clear)
+            .background(hovered ? MuxyTheme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -281,7 +281,7 @@ private struct IDEMenuActionRow: View {
             .padding(.trailing, 12)
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(hovered ? MuxyTheme.hover : .clear)
+            .background(hovered ? MuxyTheme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

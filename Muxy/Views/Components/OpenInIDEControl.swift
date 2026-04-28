@@ -121,7 +121,6 @@ struct OpenInIDEControl: View {
         .background(MuxyTheme.bg)
     }
 
-    @ViewBuilder
     private func menuSection(title: String, apps: [IDEIntegrationService.IDEApplication]) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title)

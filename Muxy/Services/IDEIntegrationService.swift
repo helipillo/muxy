@@ -48,6 +48,13 @@ final class IDEIntegrationService: ObservableObject {
         let arguments: [String]
     }
 
+    struct KeywordMatch: Hashable {
+        let keyword: String
+        let symbolName: String
+        let rank: Int
+        let group: IDEApplication.Group
+    }
+
     static let selectedBundleIdentifierKey = "muxy.ide.selectedBundleIdentifier"
 
     @Published private(set) var installedApps: [IDEApplication] = []
@@ -76,11 +83,13 @@ final class IDEIntegrationService: ObservableObject {
     }
 
     func refreshInstalledApps() {
-        let workspace = workspace
-        let fileManager = fileManager
+        let discoveryRoots = Self.discoveryRoots(fileManager: fileManager)
+        let curatedAppURLs = Self.curatedBundleMetadata.keys.sorted().compactMap {
+            workspace.urlForApplication(withBundleIdentifier: $0)
+        }
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self, workspace, fileManager] in
-            let apps = Self.discoverInstalledApps(workspace: workspace, fileManager: fileManager)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, discoveryRoots, curatedAppURLs] in
+            let apps = Self.discoverInstalledApps(discoveryRoots: discoveryRoots, curatedAppURLs: curatedAppURLs)
             DispatchQueue.main.async {
                 self?.installedApps = apps
             }
@@ -152,7 +161,8 @@ final class IDEIntegrationService: ObservableObject {
         if let filePath,
            !filePath.isEmpty,
            filePath != projectPath,
-           !orderedPaths.contains(filePath) {
+           !orderedPaths.contains(filePath)
+        {
             orderedPaths.append(filePath)
         }
 
@@ -174,17 +184,22 @@ final class IDEIntegrationService: ObservableObject {
         selectedBundleIdentifier: String?
     ) -> IDEApplication? {
         if let selectedBundleIdentifier,
-           let selected = installedApps.first(where: { $0.bundleIdentifier == selectedBundleIdentifier }) {
+           let selected = installedApps.first(where: { $0.bundleIdentifier == selectedBundleIdentifier })
+        {
             return selected
         }
         return installedApps.first
     }
 
-    nonisolated private static func discoverInstalledApps(workspace: NSWorkspace, fileManager: FileManager) -> [IDEApplication] {
+    nonisolated private static func discoverInstalledApps(
+        discoveryRoots: [URL],
+        curatedAppURLs: [URL]
+    ) -> [IDEApplication] {
+        let fileManager = FileManager.default
         var discovered: [IDEApplication] = []
         var seenKeys = Set<String>()
 
-        for root in discoveryRoots(fileManager: fileManager) {
+        for root in discoveryRoots {
             for metadata in discoverAppMetadata(in: root, fileManager: fileManager) {
                 guard let app = ideApplication(from: metadata) else { continue }
                 let key = dedupeKey(for: app)
@@ -193,10 +208,8 @@ final class IDEIntegrationService: ObservableObject {
             }
         }
 
-        for bundleIdentifier in curatedBundleMetadata.keys.sorted() {
-            guard let appURL = workspace.urlForApplication(withBundleIdentifier: bundleIdentifier),
-                  let metadata = loadMetadata(at: appURL)
-            else { continue }
+        for appURL in curatedAppURLs {
+            guard let metadata = loadMetadata(at: appURL) else { continue }
             guard let app = ideApplication(from: metadata) else { continue }
             let key = dedupeKey(for: app)
             guard seenKeys.insert(key).inserted else { continue }
@@ -221,7 +234,6 @@ final class IDEIntegrationService: ObservableObject {
 
         return true
     }
-
 
     nonisolated static func ideApplication(from metadata: AppMetadata) -> IDEApplication? {
         guard let match = matchMetadata(for: metadata) else { return nil }
@@ -252,7 +264,8 @@ final class IDEIntegrationService: ObservableObject {
         }
 
         if loweredIdentifier.hasPrefix("com.jetbrains."),
-           !loweredName.contains("toolbox") {
+           !loweredName.contains("toolbox")
+        {
             return MatchMetadata(
                 symbolName: jetbrainsLikeSymbolName(for: loweredIdentifier),
                 rank: 40,
@@ -265,7 +278,8 @@ final class IDEIntegrationService: ObservableObject {
         }
 
         if metadata.category == developerToolsCategory,
-           editorLikeNameFragments.contains(where: { containsKeyword($0, in: loweredName) || containsKeyword($0, in: loweredExecutable) }) {
+           editorLikeNameFragments.contains(where: { containsKeyword($0, in: loweredName) || containsKeyword($0, in: loweredExecutable) })
+        {
             return MatchMetadata(symbolName: "chevron.left.forwardslash.chevron.right", rank: 90, group: .editor)
         }
 
@@ -318,7 +332,8 @@ final class IDEIntegrationService: ObservableObject {
             at: root,
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
-        ) else {
+        )
+        else {
             return []
         }
 
@@ -540,35 +555,35 @@ final class IDEIntegrationService: ObservableObject {
         "air",
     ]
 
-    nonisolated private static let keywordMatches: [(keyword: String, symbolName: String, rank: Int, group: IDEApplication.Group)] = [
-        ("visual studio code", "chevron.left.forwardslash.chevron.right", 10, .editor),
-        ("vscode", "chevron.left.forwardslash.chevron.right", 11, .editor),
-        ("code - insiders", "chevron.left.forwardslash.chevron.right", 12, .editor),
-        ("vscodium", "chevron.left.forwardslash.chevron.right", 13, .editor),
-        ("cursor", "cursorarrow.click.2", 14, .editor),
-        ("zed", "bolt.horizontal", 15, .editor),
-        ("windsurf", "wind", 16, .editor),
-        ("xcode", "hammer", 17, .editor),
-        ("phpstorm", "chevron.left.forwardslash.chevron.right", 18, .editor),
-        ("webstorm", "chevron.left.forwardslash.chevron.right", 19, .editor),
-        ("pycharm", "chevron.left.forwardslash.chevron.right", 20, .editor),
-        ("rubymine", "chevron.left.forwardslash.chevron.right", 21, .editor),
-        ("clion", "chevron.left.forwardslash.chevron.right", 22, .editor),
-        ("goland", "chevron.left.forwardslash.chevron.right", 23, .editor),
-        ("datagrip", "chevron.left.forwardslash.chevron.right", 24, .editor),
-        ("rider", "chevron.left.forwardslash.chevron.right", 25, .editor),
-        ("fleet", "chevron.left.forwardslash.chevron.right", 26, .editor),
-        ("intellij", "chevron.left.forwardslash.chevron.right", 27, .editor),
-        ("android studio", "chevron.left.forwardslash.chevron.right", 28, .editor),
-        ("nova", "chevron.left.forwardslash.chevron.right", 29, .editor),
-        ("sublime text", "text.cursor", 30, .editor),
-        ("bbedit", "text.cursor", 31, .editor),
-        ("textmate", "text.cursor", 32, .editor),
-        ("codex", "sparkles.rectangle.stack", 80, .otherTool),
-        ("opencode", "chevron.left.forwardslash.chevron.right", 81, .otherTool),
-        ("antigravity", "sparkles", 82, .otherTool),
-        ("jcode", "terminal", 83, .otherTool),
-        ("air", "sparkles", 84, .otherTool),
+    nonisolated private static let keywordMatches: [KeywordMatch] = [
+        .init(keyword: "visual studio code", symbolName: "chevron.left.forwardslash.chevron.right", rank: 10, group: .editor),
+        .init(keyword: "vscode", symbolName: "chevron.left.forwardslash.chevron.right", rank: 11, group: .editor),
+        .init(keyword: "code - insiders", symbolName: "chevron.left.forwardslash.chevron.right", rank: 12, group: .editor),
+        .init(keyword: "vscodium", symbolName: "chevron.left.forwardslash.chevron.right", rank: 13, group: .editor),
+        .init(keyword: "cursor", symbolName: "cursorarrow.click.2", rank: 14, group: .editor),
+        .init(keyword: "zed", symbolName: "bolt.horizontal", rank: 15, group: .editor),
+        .init(keyword: "windsurf", symbolName: "wind", rank: 16, group: .editor),
+        .init(keyword: "xcode", symbolName: "hammer", rank: 17, group: .editor),
+        .init(keyword: "phpstorm", symbolName: "chevron.left.forwardslash.chevron.right", rank: 18, group: .editor),
+        .init(keyword: "webstorm", symbolName: "chevron.left.forwardslash.chevron.right", rank: 19, group: .editor),
+        .init(keyword: "pycharm", symbolName: "chevron.left.forwardslash.chevron.right", rank: 20, group: .editor),
+        .init(keyword: "rubymine", symbolName: "chevron.left.forwardslash.chevron.right", rank: 21, group: .editor),
+        .init(keyword: "clion", symbolName: "chevron.left.forwardslash.chevron.right", rank: 22, group: .editor),
+        .init(keyword: "goland", symbolName: "chevron.left.forwardslash.chevron.right", rank: 23, group: .editor),
+        .init(keyword: "datagrip", symbolName: "chevron.left.forwardslash.chevron.right", rank: 24, group: .editor),
+        .init(keyword: "rider", symbolName: "chevron.left.forwardslash.chevron.right", rank: 25, group: .editor),
+        .init(keyword: "fleet", symbolName: "chevron.left.forwardslash.chevron.right", rank: 26, group: .editor),
+        .init(keyword: "intellij", symbolName: "chevron.left.forwardslash.chevron.right", rank: 27, group: .editor),
+        .init(keyword: "android studio", symbolName: "chevron.left.forwardslash.chevron.right", rank: 28, group: .editor),
+        .init(keyword: "nova", symbolName: "chevron.left.forwardslash.chevron.right", rank: 29, group: .editor),
+        .init(keyword: "sublime text", symbolName: "text.cursor", rank: 30, group: .editor),
+        .init(keyword: "bbedit", symbolName: "text.cursor", rank: 31, group: .editor),
+        .init(keyword: "textmate", symbolName: "text.cursor", rank: 32, group: .editor),
+        .init(keyword: "codex", symbolName: "sparkles.rectangle.stack", rank: 80, group: .otherTool),
+        .init(keyword: "opencode", symbolName: "chevron.left.forwardslash.chevron.right", rank: 81, group: .otherTool),
+        .init(keyword: "antigravity", symbolName: "sparkles", rank: 82, group: .otherTool),
+        .init(keyword: "jcode", symbolName: "terminal", rank: 83, group: .otherTool),
+        .init(keyword: "air", symbolName: "sparkles", rank: 84, group: .otherTool),
     ]
 
     private enum LaunchStrategy {

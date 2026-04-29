@@ -1276,9 +1276,18 @@ enum VCSFileTree {
         let fileCount: Int
     }
 
-    enum Row: Equatable {
+    enum Row: Equatable, Identifiable {
         case folder(Folder)
         case file(GitStatusFile, depth: Int)
+
+        var id: String {
+            switch self {
+            case let .folder(folder):
+                "folder:\(folder.path)"
+            case let .file(file, _):
+                "file:\(file.path)"
+            }
+        }
     }
 
     static func rows(files: [GitStatusFile], expandedFolders: Set<String>) -> [Row] {

@@ -1528,7 +1528,7 @@ private struct SectionSplitLayout: View {
             }
         } else {
             let rows = isStaged ? state.stagedTreeRows : state.unstagedTreeRows
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+            ForEach(rows) { row in
                 switch row {
                 case let .folder(folder):
                     folderSection(folder, isStaged: isStaged)

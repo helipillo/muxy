@@ -7,6 +7,7 @@ struct AppearanceSettingsView: View {
     @AppStorage("muxy.vcsDisplayMode") private var vcsDisplayMode = VCSDisplayMode.attached.rawValue
     @AppStorage(SidebarCollapsedStyle.storageKey) private var sidebarCollapsedStyle = SidebarCollapsedStyle.defaultValue.rawValue
     @AppStorage(SidebarExpandedStyle.storageKey) private var sidebarExpandedStyle = SidebarExpandedStyle.defaultValue.rawValue
+    @AppStorage(IconSize.storageKey) private var iconSize = IconSize.defaultValue.rawValue
 
     var body: some View {
         SettingsContainer {
@@ -31,6 +32,23 @@ struct AppearanceSettingsView: View {
                         ThemePicker()
                             .environment(themeService)
                     }
+                }
+            }
+
+            SettingsSection("Icons") {
+                SettingsRow("Size") {
+                    HStack {
+                        Spacer()
+                        Picker("", selection: $iconSize) {
+                            ForEach(IconSize.allCases) { size in
+                                Text(size.title).tag(size.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .fixedSize()
+                    }
+                    .frame(width: SettingsMetrics.controlWidth)
                 }
             }
 

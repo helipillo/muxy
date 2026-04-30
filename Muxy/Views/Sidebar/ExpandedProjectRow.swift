@@ -14,6 +14,7 @@ struct ExpandedProjectRow: View {
 
     @Environment(AppState.self) private var appState
     @Environment(WorktreeStore.self) private var worktreeStore
+    @Environment(\.iconScale) private var iconScale
 
     @AppStorage(GeneralSettingsKeys.autoExpandWorktreesOnProjectSwitch)
     private var autoExpandWorktrees = false
@@ -187,11 +188,11 @@ struct ExpandedProjectRow: View {
             }
         } label: {
             Image(systemName: "chevron.right")
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(size: 9 * iconScale, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgDim)
                 .rotationEffect(.degrees(worktreesExpanded ? 90 : 0))
                 .animation(.easeInOut(duration: 0.15), value: worktreesExpanded)
-                .frame(width: 18, height: 18)
+                .frame(width: 18 * iconScale, height: 18 * iconScale)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -201,6 +202,7 @@ struct ExpandedProjectRow: View {
     private var projectIcon: some View {
         let logo = resolvedLogo
         let unread = NotificationStore.shared.unreadCount(for: project.id)
+        let dimension = 28 * iconScale
         return ZStack {
             RoundedRectangle(cornerRadius: 6)
                 .fill(iconBackground(hasLogo: logo != nil))
@@ -209,15 +211,15 @@ struct ExpandedProjectRow: View {
                 Image(nsImage: logo)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 28, height: 28)
+                    .frame(width: dimension, height: dimension)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
                 Text(displayLetter)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 13 * iconScale, weight: .bold))
                     .foregroundStyle(letterForeground)
             }
         }
-        .frame(width: 28, height: 28)
+        .frame(width: dimension, height: dimension)
         .overlay(alignment: .topTrailing) {
             if unread > 0 {
                 NotificationBadge(count: unread)

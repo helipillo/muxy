@@ -39,6 +39,7 @@ struct FileDiffIcon: Shape {
 
 struct FileDiffIconButton: View {
     let action: () -> Void
+    @Environment(\.iconScale) private var iconScale
     @State private var hovered = false
 
     var body: some View {
@@ -48,8 +49,8 @@ struct FileDiffIconButton: View {
                     hovered ? MuxyTheme.fg : MuxyTheme.fgMuted,
                     style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
                 )
-                .frame(width: 13, height: 13)
-                .frame(width: 24, height: 24)
+                .frame(width: 13 * iconScale, height: 13 * iconScale)
+                .frame(width: 24 * iconScale, height: 24 * iconScale)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -2,6 +2,7 @@ import Darwin
 import SwiftUI
 
 struct DebugButton: View {
+    @Environment(\.iconScale) private var iconScale
     @State private var showingPopover = false
     @State private var hovered = false
 
@@ -10,9 +11,9 @@ struct DebugButton: View {
             showingPopover.toggle()
         } label: {
             Image(systemName: "ladybug.fill")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 12 * iconScale, weight: .semibold))
                 .foregroundStyle(hovered ? MuxyTheme.warning : MuxyTheme.warning.opacity(0.75))
-                .frame(width: 22, height: 22)
+                .frame(width: 22 * iconScale, height: 22 * iconScale)
                 .contentShape(Rectangle())
                 .background(hovered ? MuxyTheme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
         }

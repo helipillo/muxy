@@ -60,6 +60,7 @@ struct MainWindow: View {
     @State private var sidebarExpanded = UserDefaults.standard.bool(forKey: "muxy.sidebarExpanded")
     @AppStorage(SidebarCollapsedStyle.storageKey) private var sidebarCollapsedStyleRaw = SidebarCollapsedStyle.defaultValue.rawValue
     @AppStorage(SidebarExpandedStyle.storageKey) private var sidebarExpandedStyleRaw = SidebarExpandedStyle.defaultValue.rawValue
+    @AppStorage(IconSize.storageKey) private var iconSizeRaw = IconSize.defaultValue.rawValue
     @AppStorage("muxy.notifications.toastPosition") private var toastPositionRaw = ToastPosition.topCenter.rawValue
     private let trafficLightWidth: CGFloat = 75
 
@@ -169,6 +170,7 @@ struct MainWindow: View {
             }
         }
         .environment(\.overlayActive, showQuickOpen || showWorktreeSwitcher)
+        .environment(\.iconScale, iconScale)
         .overlay(alignment: toastAlignment) {
             if let toast = ToastState.shared.message {
                 HStack(spacing: 6) {
@@ -479,17 +481,22 @@ struct MainWindow: View {
         SidebarExpandedStyle(rawValue: sidebarExpandedStyleRaw) ?? .defaultValue
     }
 
+    private var iconScale: CGFloat {
+        (IconSize(rawValue: iconSizeRaw) ?? .defaultValue).scale
+    }
+
     private var topBarLeadingWidth: CGFloat {
         let sidebarWidth = SidebarLayout.resolvedWidth(
             expanded: sidebarExpanded,
             collapsedStyle: sidebarCollapsedStyle,
-            expandedStyle: sidebarExpandedStyle
+            expandedStyle: sidebarExpandedStyle,
+            iconScale: iconScale
         ) + 1
         let navigationMinimum = trafficLightWidth + navigationArrowsWidth
         return max(navigationMinimum, sidebarWidth)
     }
 
-    private var navigationArrowsWidth: CGFloat { 52 }
+    private var navigationArrowsWidth: CGFloat { (44 * iconScale).rounded() + 8 }
 
     private var devModeBadge: some View {
         DebugButton()
@@ -861,14 +868,15 @@ private struct NavigationArrowButton: View {
     let isEnabled: Bool
     let label: String
     let action: () -> Void
+    @Environment(\.iconScale) private var iconScale
     @State private var hovered = false
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 12 * iconScale, weight: .semibold))
                 .foregroundStyle(foregroundColor)
-                .frame(width: 22, height: 22)
+                .frame(width: 22 * iconScale, height: 22 * iconScale)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

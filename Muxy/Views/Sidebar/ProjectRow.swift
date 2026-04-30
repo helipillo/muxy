@@ -14,6 +14,7 @@ struct ProjectRow: View {
 
     @Environment(AppState.self) private var appState
     @Environment(WorktreeStore.self) private var worktreeStore
+    @Environment(\.iconScale) private var iconScale
 
     @State private var hovered = false
     @State private var isRenaming = false
@@ -145,6 +146,7 @@ struct ProjectRow: View {
     private var projectIcon: some View {
         let logo = resolvedLogo
         let unread = NotificationStore.shared.unreadCount(for: project.id)
+        let dimension = 28 * iconScale
         return ZStack {
             RoundedRectangle(cornerRadius: 6)
                 .fill(iconBackground(hasLogo: logo != nil))
@@ -153,15 +155,15 @@ struct ProjectRow: View {
                 Image(nsImage: logo)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 28, height: 28)
+                    .frame(width: dimension, height: dimension)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
                 Text(displayLetter)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 13 * iconScale, weight: .bold))
                     .foregroundStyle(letterForeground)
             }
         }
-        .frame(width: 28, height: 28)
+        .frame(width: dimension, height: dimension)
         .padding(3)
         .overlay(alignment: .topTrailing) {
             if unread > 0 {

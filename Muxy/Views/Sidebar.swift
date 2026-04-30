@@ -5,15 +5,24 @@ enum SidebarLayout {
     static let expandedWidth: CGFloat = 220
     static let width: CGFloat = 44
 
+    static func collapsedWidth(iconScale: CGFloat) -> CGFloat {
+        (collapsedWidth * iconScale).rounded()
+    }
+
+    static func expandedWidth(iconScale: CGFloat) -> CGFloat {
+        max(expandedWidth, (collapsedWidth * iconScale).rounded() + (expandedWidth - collapsedWidth))
+    }
+
     static func resolvedWidth(
         expanded: Bool,
         collapsedStyle: SidebarCollapsedStyle,
-        expandedStyle: SidebarExpandedStyle
+        expandedStyle: SidebarExpandedStyle,
+        iconScale: CGFloat = 1.0
     ) -> CGFloat {
         if expanded {
-            return expandedStyle == .wide ? expandedWidth : collapsedWidth
+            return expandedStyle == .wide ? expandedWidth(iconScale: iconScale) : collapsedWidth(iconScale: iconScale)
         }
-        return collapsedStyle == .hidden ? 0 : collapsedWidth
+        return collapsedStyle == .hidden ? 0 : collapsedWidth(iconScale: iconScale)
     }
 
     static func isWide(expanded: Bool, expandedStyle: SidebarExpandedStyle) -> Bool {
@@ -29,6 +38,7 @@ struct Sidebar: View {
     @Environment(AppState.self) private var appState
     @Environment(ProjectStore.self) private var projectStore
     @Environment(WorktreeStore.self) private var worktreeStore
+    @Environment(\.iconScale) private var iconScale
     @State private var dragState = ProjectDragState()
     @State private var expanded = UserDefaults.standard.bool(forKey: "muxy.sidebarExpanded")
     @AppStorage(SidebarCollapsedStyle.storageKey) private var collapsedStyleRaw = SidebarCollapsedStyle.defaultValue.rawValue
@@ -60,7 +70,8 @@ struct Sidebar: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxHeight: .infinity, alignment: .bottom)
-        .frame(width: isHidden ? 0 : (isWide ? SidebarLayout.expandedWidth : SidebarLayout.collapsedWidth))
+        .frame(width: isHidden ? 0 :
+            (isWide ? SidebarLayout.expandedWidth(iconScale: iconScale) : SidebarLayout.collapsedWidth(iconScale: iconScale)))
         .opacity(isHidden ? 0 : 1)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sidebar")
@@ -221,6 +232,7 @@ private struct ProjectDragState {
 private struct AddProjectButton: View {
     var expanded: Bool = false
     let action: () -> Void
+    @Environment(\.iconScale) private var iconScale
     @State private var hovered = false
 
     var body: some View {
@@ -241,10 +253,10 @@ private struct AddProjectButton: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(MuxyTheme.hover)
             Image(systemName: "plus")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 13 * iconScale, weight: .bold))
                 .foregroundStyle(hovered ? MuxyTheme.accent : MuxyTheme.fgMuted)
         }
-        .frame(width: 28, height: 28)
+        .frame(width: 28 * iconScale, height: 28 * iconScale)
         .padding(3)
     }
 
@@ -254,10 +266,10 @@ private struct AddProjectButton: View {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(MuxyTheme.surface)
                 Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 13 * iconScale, weight: .bold))
                     .foregroundStyle(hovered ? MuxyTheme.accent : MuxyTheme.fgMuted)
             }
-            .frame(width: 28, height: 28)
+            .frame(width: 28 * iconScale, height: 28 * iconScale)
 
             Text("Add Project")
                 .font(.system(size: 12, weight: .medium))

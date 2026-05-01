@@ -9,10 +9,15 @@ protocol AIProviderIntegration {
     var socketTypeKey: String { get }
     var iconName: String { get }
     var executableNames: [String] { get }
+    var hookScriptName: String { get }
 
     func isToolInstalled() -> Bool
     func install(hookScriptPath: String) throws
     func uninstall() throws
+}
+
+extension AIProviderIntegration {
+    var hookScriptName: String { "muxy-claude-hook" }
 }
 
 extension AIProviderIntegration {
@@ -42,16 +47,21 @@ final class AIProviderRegistry {
 
     private let claudeCodeProvider = ClaudeCodeProvider()
     private let openCodeProvider = OpenCodeProvider()
+    private let codexProvider = CodexProvider()
+    private let cursorProvider = CursorProvider()
 
     lazy var providers: [AIProviderIntegration] = [
         claudeCodeProvider,
         openCodeProvider,
+        codexProvider,
+        cursorProvider,
     ]
 
     lazy var usageProviders: [any AIUsageProvider] = [
         claudeCodeProvider,
         CodexUsageProvider(),
         CopilotUsageProvider(),
+        CursorUsageProvider(),
         AmpUsageProvider(),
         ZaiUsageProvider(),
         MiniMaxUsageProvider(),
@@ -69,17 +79,16 @@ final class AIProviderRegistry {
         }
         #endif
 
-        guard let hookScript = MuxyNotificationHooks.hookScriptPath else {
-            logger.info("Hook script not found, skipping AI provider installs")
-            return
-        }
-
         for provider in providers {
             guard provider.isEnabled else {
                 try? provider.uninstall()
                 continue
             }
             guard provider.isToolInstalled() else { continue }
+            guard let hookScript = MuxyNotificationHooks.scriptPath(named: provider.hookScriptName, extension: "sh") else {
+                logger.info("Hook script \(provider.hookScriptName) not found, skipping \(provider.displayName)")
+                continue
+            }
             do {
                 try provider.install(hookScriptPath: hookScript)
                 logger.info("Installed \(provider.displayName) integration")
@@ -90,8 +99,8 @@ final class AIProviderRegistry {
     }
 
     func forceInstall(_ provider: AIProviderIntegration) {
-        guard let hookScript = MuxyNotificationHooks.hookScriptPath else {
-            logger.info("Hook script not found, skipping force install")
+        guard let hookScript = MuxyNotificationHooks.scriptPath(named: provider.hookScriptName, extension: "sh") else {
+            logger.info("Hook script \(provider.hookScriptName) not found, skipping force install")
             return
         }
 

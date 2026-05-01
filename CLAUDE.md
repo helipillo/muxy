@@ -1,15 +1,5 @@
 # Muxy
 
-
-## Build & Run
-
-```bash
-scripts/setup.sh         # First-time setup (downloads GhosttyKit.xcframework)
-swift build              # Debug build
-swift build -c release   # Release build
-swift run Muxy            # Run the app
-```
-
 Requires macOS 14+ and Swift 6.0+. No external dependency managers needed — everything is SPM-based.
 
 ## Linting & Formatting
@@ -83,6 +73,7 @@ The xcframework is built via GitHub Actions on the [muxy-app/ghostty](https://gi
 - If the feature is testable, then you must write tests.
 - Avoid long PR descriptions. It is for humans and keep it in 3 lines maximum.
 - Upload screenshots or recordings for the PRs.
+- Never answer any question without a proper investigation and exploring the codebase.
 
 
 ## Code Review

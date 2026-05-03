@@ -154,8 +154,14 @@ struct TerminalBridge: NSViewRepresentable {
         configureFileOpenCallback(view)
         context.coordinator.wasFocused = focused
         if focused, !overlayActive {
+            view.notifySurfaceFocused()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 view.window?.makeFirstResponder(view)
+            }
+        } else {
+            view.notifySurfaceUnfocused()
+            if view.window?.firstResponder === view {
+                view.window?.makeFirstResponder(nil)
             }
         }
         return view
@@ -231,13 +237,15 @@ struct TerminalBridge: NSViewRepresentable {
             Self.resolveFilePath(token, projectPath: projectPath) != nil
         }
         view.onOpenURL = { url in
-            guard let projectID, url.isFileURL else { return false }
-            let path = url.path
-            guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else { return false }
-            Task { @MainActor in
-                NotificationStore.shared.appState?.openFile(path, projectID: projectID, preserveFocus: true)
+            if let projectID, url.isFileURL {
+                let path = url.path
+                guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else { return false }
+                Task { @MainActor in
+                    NotificationStore.shared.appState?.openFile(path, projectID: projectID, preserveFocus: true)
+                }
+                return true
             }
-            return true
+            return NSWorkspace.shared.open(url)
         }
     }
 

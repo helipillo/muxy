@@ -252,9 +252,7 @@ struct MainWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: .windowFullScreenDidChange)) { notification in
             isFullScreen = notification.userInfo?["isFullScreen"] as? Bool ?? false
         }
-        .onReceive(NotificationCenter.default.publisher(for: .openVCSWindow)) { _ in
-            openWindow(id: "vcs")
-        }
+        .background(WindowOpenReceiver(openWindow: openWindow))
         .onReceive(NotificationCenter.default.publisher(for: .toggleAttachedVCS)) { _ in
             toggleAttachedVCSPanel()
         }
@@ -295,6 +293,10 @@ struct MainWindow: View {
             guard isPresented, let message = appState.pendingSaveErrorMessage else { return }
             presentSaveErrorAlert(message: message)
         }
+        .onChange(of: appState.pendingLayoutApply != nil) { _, isPresented in
+            guard isPresented, let pending = appState.pendingLayoutApply else { return }
+            presentLayoutApplyConfirmation(pending: pending)
+        }
     }
 
     private var navigationArrows: some View {
@@ -333,8 +335,12 @@ struct MainWindow: View {
                 showDevelopmentBadge: AppEnvironment.isDevelopment,
                 openInIDEProjectPath: activeWorktreePath(for: project),
                 openInIDEFilePath: area.activeTab?.content.editorState?.filePath,
-                openInIDELine: area.activeTab?.content.editorState?.cursorLine,
-                openInIDEColumn: area.activeTab?.content.editorState?.cursorColumn,
+                openInIDECursorProvider: {
+                    guard let editorState = appState.activeTab(for: project.id)?.content.editorState else {
+                        return (nil, nil)
+                    }
+                    return (editorState.cursorLine, editorState.cursorColumn)
+                },
                 projectID: project.id,
                 onSelectTab: { tabID in
                     appState.dispatch(.selectTab(projectID: project.id, areaID: area.id, tabID: tabID))
@@ -347,6 +353,23 @@ struct MainWindow: View {
                 },
                 onCloseTab: { tabID in
                     appState.closeTab(tabID, areaID: area.id, projectID: project.id)
+                },
+                onCloseOtherTabs: { tabID in
+                    for id in area.tabs.filter({ $0.id != tabID && !$0.isPinned }).map(\.id) {
+                        appState.closeTab(id, areaID: area.id, projectID: project.id)
+                    }
+                },
+                onCloseTabsToLeft: { tabID in
+                    guard let index = area.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+                    for id in area.tabs.prefix(index).filter({ !$0.isPinned }).map(\.id) {
+                        appState.closeTab(id, areaID: area.id, projectID: project.id)
+                    }
+                },
+                onCloseTabsToRight: { tabID in
+                    guard let index = area.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+                    for id in area.tabs.suffix(from: index + 1).filter({ !$0.isPinned }).map(\.id) {
+                        appState.closeTab(id, areaID: area.id, projectID: project.id)
+                    }
                 },
                 onSplit: { dir in
                     appState.dispatch(.splitArea(.init(
@@ -401,9 +424,9 @@ struct MainWindow: View {
                             OpenInIDEControl(
                                 projectPath: activeWorktreePath(for: project),
                                 filePath: activeEditorFilePath,
-                                line: activeEditorCursorLine,
-                                column: activeEditorCursorColumn
+                                cursorProvider: activeEditorCursor
                             )
+                            LayoutPickerMenu(projectID: project.id)
                         }
                         if let version = UpdateService.shared.availableUpdateVersion {
                             UpdateBadge(version: version) {
@@ -615,12 +638,9 @@ struct MainWindow: View {
         activeEditorState?.filePath
     }
 
-    private var activeEditorCursorLine: Int? {
-        activeEditorState?.cursorLine
-    }
-
-    private var activeEditorCursorColumn: Int? {
-        activeEditorState?.cursorColumn
+    private func activeEditorCursor() -> (line: Int?, column: Int?) {
+        guard let state = activeEditorState else { return (nil, nil) }
+        return (state.cursorLine, state.cursorColumn)
     }
 
     private func syncFileTreeSelection(filePath: String?) {
@@ -827,6 +847,33 @@ struct MainWindow: View {
             appState.pendingSaveErrorMessage = nil
         }
     }
+
+    private func presentLayoutApplyConfirmation(pending: AppState.PendingLayoutApply) {
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow,
+              window.attachedSheet == nil
+        else {
+            appState.cancelApplyLayout()
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Apply Layout '\(pending.layoutName)'?"
+        alert.informativeText = "All terminals and tabs in this worktree will be closed and replaced with the layout."
+        alert.alertStyle = .warning
+        alert.icon = NSApp.applicationIconImage
+        alert.addButton(withTitle: "Apply")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons[0].keyEquivalent = "\r"
+        alert.buttons[1].keyEquivalent = "\u{1b}"
+
+        alert.beginSheetModal(for: window) { response in
+            if response == .alertFirstButtonReturn {
+                appState.confirmApplyLayout()
+            } else {
+                appState.cancelApplyLayout()
+            }
+        }
+    }
 }
 
 private struct WindowTitleUpdater: NSViewRepresentable {
@@ -1007,5 +1054,20 @@ private final class ShortcutInterceptingView: NSView {
         guard let mouseMonitor else { return }
         NSEvent.removeMonitor(mouseMonitor)
         self.mouseMonitor = nil
+    }
+}
+
+private struct WindowOpenReceiver: View {
+    let openWindow: OpenWindowAction
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onReceive(NotificationCenter.default.publisher(for: .openVCSWindow)) { _ in
+                openWindow(id: "vcs")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openHelpWindow)) { _ in
+                openWindow(id: "help")
+            }
     }
 }

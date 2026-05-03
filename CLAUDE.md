@@ -1,15 +1,5 @@
 # Muxy
 
-
-## Build & Run
-
-```bash
-scripts/setup.sh         # First-time setup (downloads GhosttyKit.xcframework)
-swift build              # Debug build
-swift build -c release   # Release build
-swift run Muxy            # Run the app
-```
-
 Requires macOS 14+ and Swift 6.0+. No external dependency managers needed — everything is SPM-based.
 
 ## Linting & Formatting
@@ -28,7 +18,7 @@ Run `scripts/checks.sh --fix` after every task.
 ## Architecture
 
 - Muxy is a macOS terminal multiplexer built with SwiftUI that uses [libghostty](https://github.com/ghostty-org/ghostty) for terminal emulation and rendering via Metal.
-- The architecture of the app is documented at `./docs/architecture.md` and must always be up to date.
+- The architecture of the app is documented at `./docs/developer/architecture.md` and must always be up to date.
 
 ### Core Components
 
@@ -46,7 +36,7 @@ Run `scripts/checks.sh --fix` after every task.
 
 Key libghostty types: `ghostty_app_t` (app), `ghostty_surface_t` (terminal surface), `ghostty_config_t` (configuration). Surfaces are created when terminal views move to a window and destroyed on removal.
 
-The xcframework is built via GitHub Actions on the [muxy-app/ghostty](https://github.com/muxy-app/ghostty) fork. See [docs/building-ghostty.md](docs/building-ghostty.md) for details.
+The xcframework is built via GitHub Actions on the [muxy-app/ghostty](https://github.com/muxy-app/ghostty) fork. See [docs/developer/building-ghostty.md](docs/developer/building-ghostty.md) for details.
 
 ## Data Persistence
 
@@ -83,6 +73,7 @@ The xcframework is built via GitHub Actions on the [muxy-app/ghostty](https://gi
 - If the feature is testable, then you must write tests.
 - Avoid long PR descriptions. It is for humans and keep it in 3 lines maximum.
 - Upload screenshots or recordings for the PRs.
+- Never answer any question without a proper investigation and exploring the codebase.
 
 
 ## Code Review

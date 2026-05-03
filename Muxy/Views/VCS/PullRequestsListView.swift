@@ -4,6 +4,7 @@ import SwiftUI
 struct PullRequestsListView: View {
     @Bindable var state: VCSTabState
     let onCheckout: (GitRepositoryService.PRListItem) -> Void
+    @Environment(\.iconScale) private var iconScale
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,7 +18,7 @@ struct PullRequestsListView: View {
         HStack(spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 10 * iconScale, weight: .semibold))
                     .foregroundStyle(MuxyTheme.fgDim)
                 TextField("Search", text: $state.pullRequestSearchQuery)
                     .textFieldStyle(.plain)
@@ -28,7 +29,7 @@ struct PullRequestsListView: View {
                         state.pullRequestSearchQuery = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 10))
+                            .font(.system(size: 10 * iconScale))
                             .foregroundStyle(MuxyTheme.fgDim)
                     }
                     .buttonStyle(.plain)
@@ -61,7 +62,7 @@ struct PullRequestsListView: View {
                     Text(filterLabel(state.pullRequestStateFilter))
                         .font(.system(size: 11, weight: .medium))
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.system(size: 8 * iconScale, weight: .bold))
                 }
                 .foregroundStyle(MuxyTheme.fgMuted)
                 .padding(.horizontal, 6)
@@ -131,7 +132,7 @@ struct PullRequestsListView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 10 * iconScale, weight: .bold))
                     Text("Sync now")
                         .font(.system(size: 11, weight: .medium))
                 }
@@ -149,7 +150,7 @@ struct PullRequestsListView: View {
     private func emptyState(icon: String, text: String) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 16))
+                .font(.system(size: 16 * iconScale))
                 .foregroundStyle(MuxyTheme.fgDim)
             Text(text)
                 .font(.system(size: 11))
@@ -166,6 +167,7 @@ struct PullRequestRow: View {
     let isCheckingOut: Bool
     let onCheckout: () -> Void
 
+    @Environment(\.iconScale) private var iconScale
     @State private var hovered = false
 
     var body: some View {
@@ -190,7 +192,7 @@ struct PullRequestRow: View {
                         .font(.system(size: 10))
                         .foregroundStyle(MuxyTheme.fgDim)
                     Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 9))
+                        .font(.system(size: 9 * iconScale))
                         .foregroundStyle(MuxyTheme.fgDim)
                     Text("\(pr.headBranch) → \(pr.baseBranch)")
                         .font(.system(size: 10, design: .monospaced))
@@ -218,9 +220,9 @@ struct PullRequestRow: View {
     private var stateBadge: some View {
         let (symbol, color) = stateAppearance
         Image(systemName: symbol)
-            .font(.system(size: 11, weight: .semibold))
+            .font(.system(size: 11 * iconScale, weight: .semibold))
             .foregroundStyle(color)
-            .frame(width: 14)
+            .frame(width: 14 * iconScale)
     }
 
     private var stateAppearance: (String, Color) {
@@ -239,15 +241,15 @@ struct PullRequestRow: View {
             EmptyView()
         case .pending:
             Image(systemName: "clock")
-                .font(.system(size: 10))
+                .font(.system(size: 10 * iconScale))
                 .foregroundStyle(MuxyTheme.fgMuted)
         case .success:
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 10))
+                .font(.system(size: 10 * iconScale))
                 .foregroundStyle(MuxyTheme.diffAddFg)
         case .failure:
             Image(systemName: "xmark.octagon.fill")
-                .font(.system(size: 10))
+                .font(.system(size: 10 * iconScale))
                 .foregroundStyle(MuxyTheme.diffRemoveFg)
         }
     }
@@ -259,7 +261,7 @@ struct PullRequestRow: View {
                     ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: "arrow.down.to.line")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 9 * iconScale, weight: .bold))
                 }
                 Text("Checkout")
                     .font(.system(size: 10, weight: .medium))
@@ -277,6 +279,7 @@ struct PullRequestRow: View {
 
 struct PullRequestsAutoSyncMenu: View {
     @Bindable var state: VCSTabState
+    @Environment(\.iconScale) private var iconScale
 
     private static let options: [(minutes: Int, label: String)] = [
         (0, "Off"),
@@ -301,9 +304,9 @@ struct PullRequestsAutoSyncMenu: View {
             }
         } label: {
             Image(systemName: state.pullRequestAutoSyncMinutes > 0 ? "clock.fill" : "clock")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 11 * iconScale, weight: .semibold))
                 .foregroundStyle(state.pullRequestAutoSyncMinutes > 0 ? MuxyTheme.accent : MuxyTheme.fgMuted)
-                .frame(width: 18, height: 18)
+                .frame(width: 18 * iconScale, height: 18 * iconScale)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

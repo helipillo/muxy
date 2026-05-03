@@ -125,6 +125,7 @@ private struct CommitRow: View {
     let onRevert: (String, String) -> Void
     let onCreateBranch: (String) -> Void
     let onCreateTag: (String) -> Void
+    @Environment(\.iconScale) private var iconScale
     @State private var hovered = false
 
     private var dotColor: Color {
@@ -233,7 +234,7 @@ private struct CommitRow: View {
 
         return HStack(spacing: 2) {
             Image(systemName: icon)
-                .font(.system(size: 8, weight: .semibold))
+                .font(.system(size: 8 * iconScale, weight: .semibold))
             Text(ref.name)
                 .font(.system(size: 9, weight: .semibold))
                 .lineLimit(1)

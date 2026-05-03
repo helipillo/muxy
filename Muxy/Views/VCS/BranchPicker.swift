@@ -8,6 +8,7 @@ struct BranchPicker: View {
     let onRefresh: () -> Void
     let onCreateBranch: (() -> Void)?
     let onDeleteBranch: ((String) -> Void)?
+    @Environment(\.iconScale) private var iconScale
     @State private var showPopover = false
 
     private var branchItems: [BranchItem] {
@@ -21,14 +22,14 @@ struct BranchPicker: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 9 * iconScale, weight: .semibold))
                 Text(currentBranch ?? "detached")
                     .font(.system(size: 10, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: 120, alignment: .leading)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                    .font(.system(size: 8 * iconScale, weight: .bold))
                     .foregroundStyle(MuxyTheme.fgDim)
             }
             .foregroundStyle(MuxyTheme.fg.opacity(0.85))
@@ -125,6 +126,7 @@ private struct BranchRow: View {
     let name: String
     let isActive: Bool
     let isHighlighted: Bool
+    @Environment(\.iconScale) private var iconScale
     @State private var hovered = false
 
     var body: some View {
@@ -144,7 +146,7 @@ private struct BranchRow: View {
 
             if isActive {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 10 * iconScale, weight: .bold))
                     .foregroundStyle(MuxyTheme.accent)
             }
         }

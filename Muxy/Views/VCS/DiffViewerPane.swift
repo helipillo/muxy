@@ -30,6 +30,7 @@ struct DiffViewerPane: View {
 
 private struct DiffViewerBreadcrumb: View {
     @Bindable var state: DiffViewerTabState
+    @Environment(\.iconScale) private var iconScale
 
     private var loadedDiff: DiffCache.LoadedDiff? {
         state.vcs.diffCache.diff(for: state.filePath)
@@ -99,9 +100,9 @@ private struct DiffViewerBreadcrumb: View {
             state.mode = mode
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10 * iconScale, weight: .semibold))
                 .foregroundStyle(selected ? MuxyTheme.fg : MuxyTheme.fgMuted)
-                .frame(width: 22, height: 20)
+                .frame(width: 22 * iconScale, height: 20 * iconScale)
                 .background(selected ? MuxyTheme.bg : Color.clear)
                 .contentShape(Rectangle())
         }

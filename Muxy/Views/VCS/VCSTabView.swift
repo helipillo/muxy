@@ -5,6 +5,7 @@ struct VCSTabView: View {
     @Bindable var state: VCSTabState
     let focused: Bool
     let onFocus: () -> Void
+    @Environment(\.iconScale) private var iconScale
     @Environment(AppState.self) private var appState
     @Environment(ProjectStore.self) private var projectStore
     @Environment(WorktreeStore.self) private var worktreeStore
@@ -683,6 +684,7 @@ struct VCSTabView: View {
 
 struct VCSSectionVisibilityMenu: View {
     @Bindable var state: VCSTabState
+    @Environment(\.iconScale) private var iconScale
     @State private var hovered = false
 
     private struct Row: Identifiable {
@@ -713,9 +715,9 @@ struct VCSSectionVisibilityMenu: View {
             }
         } label: {
             Image(systemName: "sidebar.squares.left")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 13 * iconScale, weight: .semibold))
                 .foregroundStyle(hovered ? MuxyTheme.fg : MuxyTheme.fgMuted)
-                .frame(width: 24, height: 24)
+                .frame(width: 24 * iconScale, height: 24 * iconScale)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -733,6 +735,7 @@ struct PRPill: View {
     let onRequestMerge: (GitRepositoryService.PRInfo, GitRepositoryService.PRMergeMethod) -> Void
     let onRequestClose: (GitRepositoryService.PRInfo) -> Void
 
+    @Environment(\.iconScale) private var iconScale
     @State private var showPRPopover = false
 
     var body: some View {
@@ -766,7 +769,7 @@ struct PRPill: View {
         Button(action: onRequestCreate) {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.triangle.pull")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 9 * iconScale, weight: .bold))
                 Text("Create PR")
                     .font(.system(size: 10, weight: .semibold))
             }
@@ -788,13 +791,13 @@ struct PRPill: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: prStateIcon(info))
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 9 * iconScale, weight: .bold))
                     .foregroundStyle(prStateColor(info))
                 Text("PR #\(info.number)")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(MuxyTheme.fg.opacity(0.85))
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                    .font(.system(size: 8 * iconScale, weight: .bold))
                     .foregroundStyle(MuxyTheme.fgDim)
             }
             .padding(.horizontal, 6)
@@ -880,7 +883,7 @@ struct PRPill: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 9 * iconScale, weight: .bold))
                 Text(text)
                     .font(.system(size: 10, weight: .semibold))
             }
@@ -904,13 +907,14 @@ struct PRPopover: View {
     let onOpenInBrowser: () -> Void
     let onRefresh: () -> Void
 
+    @Environment(\.iconScale) private var iconScale
     @State private var mergeMethod: GitRepositoryService.PRMergeMethod = .squash
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: stateIcon)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 14 * iconScale, weight: .semibold))
                     .foregroundStyle(stateColor)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Pull Request #\(info.number)")
@@ -928,11 +932,11 @@ struct PRPopover: View {
                             ProgressView().controlSize(.mini)
                         } else {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(size: 11 * iconScale, weight: .semibold))
                                 .foregroundStyle(MuxyTheme.fgMuted)
                         }
                     }
-                    .frame(width: 20, height: 20)
+                    .frame(width: 20 * iconScale, height: 20 * iconScale)
                 }
                 .buttonStyle(.plain)
                 .disabled(state.isRefreshingPullRequest)
@@ -956,7 +960,7 @@ struct PRPopover: View {
             Button(action: onOpenInBrowser) {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.up.right.square")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 11 * iconScale, weight: .semibold))
                     Text("Open on GitHub")
                         .font(.system(size: 11, weight: .medium))
                     Spacer(minLength: 0)
@@ -981,7 +985,7 @@ struct PRPopover: View {
                             ProgressView().controlSize(.mini)
                         } else {
                             Image(systemName: "arrow.triangle.merge")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 11 * iconScale, weight: .bold))
                         }
                         Text(state.isMergingPullRequest ? "Merging…" : mergeMethod.label)
                             .font(.system(size: 11, weight: .medium))
@@ -1006,7 +1010,7 @@ struct PRPopover: View {
                             ProgressView().controlSize(.mini)
                         } else {
                             Image(systemName: "xmark.circle")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(size: 11 * iconScale, weight: .semibold))
                         }
                         Text("Close PR")
                             .font(.system(size: 11, weight: .medium))
@@ -1176,6 +1180,7 @@ private struct SectionSplitLayout: View {
     @Binding var pendingCheckoutPR: GitRepositoryService.PRListItem?
     let onOpenInEditor: (String) -> Void
     let onOpenDiff: (String, Bool) -> Void
+    @Environment(\.iconScale) private var iconScale
 
     private static let sectionHeaderHeight: CGFloat = 30
 
@@ -1395,9 +1400,9 @@ private struct SectionSplitLayout: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: isCollapsedState ? "chevron.right" : "chevron.down")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 9 * iconScale, weight: .bold))
                         .foregroundStyle(MuxyTheme.fgDim)
-                        .frame(width: 10)
+                        .frame(width: 10 * iconScale)
 
                     Text(section.title)
                         .font(.system(size: 11, weight: .semibold))
@@ -1481,9 +1486,9 @@ private struct SectionSplitLayout: View {
             state.mode = state.mode == .unified ? .split : .unified
         } label: {
             Image(systemName: state.mode == .unified ? "rectangle.split.2x1" : "rectangle")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10 * iconScale, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgMuted)
-                .frame(width: 18, height: 18)
+                .frame(width: 18 * iconScale, height: 18 * iconScale)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1495,9 +1500,9 @@ private struct SectionSplitLayout: View {
             state.fileListMode = state.fileListMode == .flat ? .folders : .flat
         } label: {
             Image(systemName: state.fileListMode == .flat ? "folder" : "list.bullet")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10 * iconScale, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgMuted)
-                .frame(width: 18, height: 18)
+                .frame(width: 18 * iconScale, height: 18 * iconScale)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1511,9 +1516,9 @@ private struct SectionSplitLayout: View {
             state.setExpanded(files: files, expanded: !anyExpanded)
         } label: {
             Image(systemName: anyExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10 * iconScale, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgMuted)
-                .frame(width: 18, height: 18)
+                .frame(width: 18 * iconScale, height: 18 * iconScale)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1649,6 +1654,7 @@ private struct FileRow: View {
     let onDiscard: () -> Void
     let onOpenInEditor: () -> Void
     let onOpenDiff: () -> Void
+    @Environment(\.iconScale) private var iconScale
     @State private var hovered = false
 
     private var statusColor: Color {
@@ -1671,9 +1677,9 @@ private struct FileRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10 * iconScale, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgDim)
-                .frame(width: 12)
+                .frame(width: 12 * iconScale)
 
             Text(statusText)
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
@@ -1746,18 +1752,19 @@ private struct FolderRow: View {
     let fileCount: Int
     let expanded: Bool
     let onToggle: () -> Void
+    @Environment(\.iconScale) private var iconScale
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10 * iconScale, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgDim)
-                .frame(width: 12)
+                .frame(width: 12 * iconScale)
 
             Image(systemName: "folder")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 11 * iconScale, weight: .semibold))
                 .foregroundStyle(MuxyTheme.fgMuted)
-                .frame(width: 11, height: 11)
+                .frame(width: 11 * iconScale, height: 11 * iconScale)
 
             Text(name)
                 .font(.system(size: 12, weight: .medium))

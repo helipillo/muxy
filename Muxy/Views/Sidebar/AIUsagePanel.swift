@@ -6,6 +6,7 @@ struct AIUsagePreviewButton: View {
     let expanded: Bool
     let onTap: () -> Void
 
+    @Environment(\.iconScale) private var iconScale
     @State private var hovered = false
 
     private var foreground: Color {
@@ -39,21 +40,21 @@ struct AIUsagePreviewButton: View {
                     .minimumScaleFactor(0.8)
             }
         }
-        .frame(height: 24)
+        .frame(height: 24 * iconScale)
     }
 
     private var compactLabel: some View {
         iconGlyph
-            .frame(width: 24, height: 24)
+            .frame(width: 24 * iconScale, height: 24 * iconScale)
     }
 
     @ViewBuilder
     private var iconGlyph: some View {
         if let display {
-            ProviderIconView(iconName: display.iconName, size: 14, style: .monochrome(foreground))
+            ProviderIconView(iconName: display.iconName, size: 14 * iconScale, style: .monochrome(foreground))
         } else {
             Image(systemName: "sparkles")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 13 * iconScale, weight: .semibold))
                 .foregroundStyle(foreground)
         }
     }
@@ -65,6 +66,8 @@ struct AIUsagePanel: View {
     let lastRefreshDate: Date?
     let onRefresh: () -> Void
 
+    @Environment(\.iconScale) private var iconScale
+
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
@@ -75,7 +78,7 @@ struct AIUsagePanel: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12 * iconScale, weight: .semibold))
                     .foregroundStyle(MuxyTheme.fgMuted)
                 Text("AI Usage")
                     .font(.system(size: 12, weight: .semibold))
@@ -88,10 +91,10 @@ struct AIUsagePanel: View {
                                 .controlSize(.small)
                         } else {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(size: 11 * iconScale, weight: .semibold))
                         }
                     }
-                    .frame(width: 14, height: 14)
+                    .frame(width: 14 * iconScale, height: 14 * iconScale)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(MuxyTheme.fgMuted)
@@ -127,12 +130,13 @@ struct AIUsagePanel: View {
 struct AIProviderUsageView: View {
     let snapshot: AIProviderUsageSnapshot
 
+    @Environment(\.iconScale) private var iconScale
     @AppStorage(AIUsageSettingsStore.sidebarPreviewProviderIDKey) private var pinnedRawValue: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                ProviderIconView(iconName: snapshot.providerIconName, size: 14, style: .monochrome(MuxyTheme.fg))
+                ProviderIconView(iconName: snapshot.providerIconName, size: 14 * iconScale, style: .monochrome(MuxyTheme.fg))
                 Text(snapshot.providerName)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(MuxyTheme.fg)

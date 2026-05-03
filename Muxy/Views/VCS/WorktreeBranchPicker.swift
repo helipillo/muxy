@@ -15,6 +15,7 @@ struct WorktreeBranchPicker: View {
 
     @Environment(AppState.self) private var appState
     @Environment(WorktreeStore.self) private var worktreeStore
+    @Environment(\.iconScale) private var iconScale
 
     @State private var showPopover = false
     @State private var segment: Segment = .worktrees
@@ -47,22 +48,22 @@ struct WorktreeBranchPicker: View {
         Button(action: open) {
             HStack(spacing: 4) {
                 Image(systemName: "square.stack.3d.up")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 9 * iconScale, weight: .semibold))
                 Text(worktreeLabel)
                     .font(.system(size: 10, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 7, weight: .bold))
+                    .font(.system(size: 7 * iconScale, weight: .bold))
                     .foregroundStyle(MuxyTheme.fgDim)
                 Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 9 * iconScale, weight: .semibold))
                 Text(branchLabel)
                     .font(.system(size: 10, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                    .font(.system(size: 8 * iconScale, weight: .bold))
                     .foregroundStyle(MuxyTheme.fgDim)
             }
             .frame(maxWidth: 160, alignment: .leading)

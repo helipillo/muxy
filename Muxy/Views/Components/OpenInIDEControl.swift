@@ -8,9 +8,16 @@ struct OpenInIDEControl: View {
     var compact = true
 
     @ObservedObject private var ideService = IDEIntegrationService.shared
+    @Environment(\.iconScale) private var iconScale
     @State private var hoveredPrimary = false
     @State private var hoveredMenu = false
     @State private var showingMenu = false
+
+    private var compactPrimaryWidth: CGFloat { 22 * iconScale }
+    private var compactPrimaryHeight: CGFloat { 24 * iconScale }
+    private var compactMenuWidth: CGFloat { 14 * iconScale }
+    private var expandedMenuWidth: CGFloat { 18 * iconScale }
+    private var buttonHeight: CGFloat { 24 * iconScale }
 
     var body: some View {
         if compact {
@@ -28,11 +35,11 @@ struct OpenInIDEControl: View {
                         AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 16)
                     } else {
                         Image(systemName: "chevron.left.forwardslash.chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 11 * iconScale, weight: .semibold))
                             .foregroundStyle(primaryForeground)
                     }
                 }
-                .frame(width: 22, height: 24)
+                .frame(width: compactPrimaryWidth, height: compactPrimaryHeight)
                 .contentShape(Rectangle())
                 .background(hoveredPrimary ? MuxyTheme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
             }
@@ -42,7 +49,7 @@ struct OpenInIDEControl: View {
             .help(helpText)
             .accessibilityLabel(helpText)
 
-            menuToggleButton(width: 14)
+            menuToggleButton(width: compactMenuWidth)
         }
         .popover(isPresented: $showingMenu, arrowEdge: .bottom) {
             menuPopoverContent
@@ -57,13 +64,14 @@ struct OpenInIDEControl: View {
                         AppBundleIconView(appURL: defaultIDE.appURL, fallbackSystemName: defaultIDE.symbolName, size: 16)
                     } else {
                         Image(systemName: "chevron.left.forwardslash.chevron.right")
+                            .font(.system(size: 11 * iconScale, weight: .semibold))
                     }
                     Text(defaultIDE.map { "Open in \($0.displayName)" } ?? "Open in IDE")
+                        .font(.system(size: 12, weight: .semibold))
                 }
-                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(primaryForeground)
                 .padding(.horizontal, 8)
-                .frame(height: 24)
+                .frame(height: buttonHeight)
                 .contentShape(Rectangle())
                 .background(hoveredPrimary ? MuxyTheme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
             }
@@ -73,7 +81,7 @@ struct OpenInIDEControl: View {
             .help(helpText)
             .accessibilityLabel(helpText)
 
-            menuToggleButton(width: 18)
+            menuToggleButton(width: expandedMenuWidth)
         }
         .popover(isPresented: $showingMenu, arrowEdge: .bottom) {
             menuPopoverContent
@@ -86,9 +94,9 @@ struct OpenInIDEControl: View {
             showingMenu.toggle()
         } label: {
             Image(systemName: "chevron.down")
-                .font(.system(size: 8, weight: .semibold))
+                .font(.system(size: 8 * iconScale, weight: .semibold))
                 .foregroundStyle(menuForeground)
-                .frame(width: width, height: 24)
+                .frame(width: width, height: buttonHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

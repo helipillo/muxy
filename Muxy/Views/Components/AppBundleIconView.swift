@@ -7,16 +7,20 @@ struct AppBundleIconView: View {
     let fallbackSystemName: String
     var size: CGFloat = 16
 
+    @Environment(\.iconScale) private var iconScale
+
+    private var scaledSize: CGFloat { size * iconScale }
+
     var body: some View {
-        if let image = AppBundleIconCache.shared.image(for: appURL, size: size) {
+        if let image = AppBundleIconCache.shared.image(for: appURL, size: scaledSize) {
             Image(nsImage: image)
                 .interpolation(.high)
                 .antialiased(true)
         } else {
             Image(systemName: fallbackSystemName)
-                .font(.system(size: size * 0.85, weight: .semibold))
+                .font(.system(size: scaledSize * 0.85, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: size, height: size)
+                .frame(width: scaledSize, height: scaledSize)
         }
     }
 }

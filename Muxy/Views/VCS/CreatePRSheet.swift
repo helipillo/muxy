@@ -48,6 +48,7 @@ struct CreatePRForm: View {
     @State private var initialCurrentBranch: String?
     @State private var advanced = false
     @FocusState private var titleFocused: Bool
+    @Environment(\.iconScale) private var iconScale
 
     private var currentBranchSnapshot: String {
         initialCurrentBranch ?? context.currentBranch
@@ -130,7 +131,7 @@ struct CreatePRForm: View {
             Button(action: onCancel) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 10 * iconScale, weight: .bold))
                     Text("Back")
                         .font(.system(size: 11, weight: .medium))
                 }
@@ -142,7 +143,7 @@ struct CreatePRForm: View {
             .help("Back to commit")
 
             Image(systemName: "arrow.triangle.pull")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 12 * iconScale, weight: .semibold))
                 .foregroundStyle(MuxyTheme.accent)
             Text("New Pull Request")
                 .font(.system(size: 12, weight: .semibold))
@@ -192,7 +193,7 @@ struct CreatePRForm: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: 10 * iconScale, weight: .semibold))
                             .foregroundStyle(MuxyTheme.fgDim)
                         Text(baseBranch.isEmpty ? "Select branch" : baseBranch)
                             .font(.system(size: 12, design: .monospaced))
@@ -201,7 +202,7 @@ struct CreatePRForm: View {
                             .truncationMode(.middle)
                         Spacer(minLength: 4)
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(size: 9 * iconScale, weight: .bold))
                             .foregroundStyle(MuxyTheme.fgDim)
                     }
                     .padding(.horizontal, 8)
@@ -280,7 +281,7 @@ struct CreatePRForm: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: includeAll == value ? "largecircle.fill.circle" : "circle")
-                    .font(.system(size: 12))
+                    .font(.system(size: 12 * iconScale))
                     .foregroundStyle(includeAll == value ? MuxyTheme.accent : MuxyTheme.fgDim)
                 Text(label)
                     .font(.system(size: 11))
@@ -297,7 +298,7 @@ struct CreatePRForm: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: advanced ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 9 * iconScale, weight: .bold))
                 Text("Advanced")
                     .font(.system(size: 11, weight: .medium))
             }

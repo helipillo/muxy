@@ -296,6 +296,7 @@ private struct FileTreeRow: View {
     let commands: FileTreeCommands
     let onOpenFile: (String) -> Void
     let requestFocus: () -> Void
+    @Environment(\.iconScale) private var iconScale
     @State private var hovered = false
 
     private var isSelected: Bool {
@@ -382,9 +383,9 @@ private struct FileTreeRow: View {
 
     private var icon: some View {
         Image(systemName: iconSymbol)
-            .font(.system(size: 11))
+            .font(.system(size: 11 * iconScale))
             .foregroundStyle(iconColor)
-            .frame(width: 14)
+            .frame(width: 14 * iconScale)
     }
 
     private var iconSymbol: String {
